@@ -15,7 +15,7 @@ let draft = {};
 try { draft = JSON.parse(localStorage.getItem("brb-game-settings") || "{}"); } catch {}
 if (!draft || typeof draft !== "object") draft = {};
 let selectedGame = gameNames[draft.mode] ? draft.mode : "context";
-let selectedDifficulty = ["easy", "normal", "hard"].includes(draft.difficulty) ? draft.difficulty : "normal";
+let selectedDifficulty = ["easy", "normal", "hard"].includes(draft.difficulty) ? draft.difficulty : "easy";
 let clutchEnabled = draft.clutchEnabled !== false;
 const durations = { context: 60, krillion: 30, wordle: 45 };
 for (const mode of Object.keys(durations)) {
@@ -118,7 +118,7 @@ function renderControl(state) {
     if (!hydratedGame) selectedGame = state.kind;
     durations[state.kind] = state.durationSeconds;
     if (state.kind === "context") {
-      selectedDifficulty = state.contextNextDifficulty || "normal";
+      selectedDifficulty = state.contextNextDifficulty || "easy";
       clutchEnabled = state.contextClutchEnabled !== false;
     }
     hydratedGame = true;
@@ -130,7 +130,7 @@ function renderControl(state) {
   $("#phase-badge").classList.toggle("active", state.phase === "playing");
   $("#live-message").textContent = state.message;
   $("#current-difficulty").classList.toggle("hidden", state.kind !== "context");
-  const difficultyName = (value) => value === "normal" ? "Standard" : value === "hard" ? "Hard" : "Easy";
+  const difficultyName = (value) => value === "normal" ? "Standard" : value === "hard" ? "Expert" : "Easy";
   $("#current-difficulty").textContent = "This word: " + difficultyName(state.contextDifficulty) + (state.contextDifficulty !== state.contextNextDifficulty ? " · Next word: " + difficultyName(state.contextNextDifficulty) : "");
   $("#stat-round").textContent = state.round || "—";
   const players = state.players || [];
@@ -159,7 +159,7 @@ function renderCommunity(state) {
   $("#record-wins").textContent = String(records.wins || 0);
   $("#record-streak").textContent = String(records.bestStreak || 0);
   $("#record-fastest").textContent = records.fastestSolve ? (records.fastestSolve.ms / 1000).toFixed(1) + "s" : "—";
-  $("#record-fastest-detail").textContent = records.fastestSolve ? records.fastestSolve.by + " found “" + records.fastestSolve.word + "” · " + (records.fastestSolve.difficulty === "normal" ? "Standard" : records.fastestSolve.difficulty) : "Records are saved for this community after each round.";
+  $("#record-fastest-detail").textContent = records.fastestSolve ? records.fastestSolve.by + " found “" + records.fastestSolve.word + "” · " + (records.fastestSolve.difficulty === "normal" ? "Standard" : records.fastestSolve.difficulty === "hard" ? "Expert" : "Easy") : "Records are saved for this community after each round.";
   for (const [id, scores] of [["session-leaders", state.contextSessionScores || []], ["community-leaders", records.leaderboard || []]]) {
     const list = $("#" + id);
     list.replaceChildren();

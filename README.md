@@ -57,8 +57,10 @@ Broadcaster/moderator chat controls: `!game context`, `!game wordle`,
 come from authenticated Twitch EventSub events and are checked server-side.
 
 Semantic Hunt **always** uses local vectors, even with `OPENAI_API_KEY` configured.
-The installed vocabulary contains 30,000 guess words and 2,320 target nouns:
-481 Easy, 919 Standard and 920 Hard. Each difficulty has a persistent shuffled
+The installed vocabulary contains 30,000 guess words and 2,302 target nouns:
+481 Easy, 852 Standard and 969 Expert. Easy is the default for new setups;
+saved difficulty choices are retained. Easy and Standard use explicit reviewed
+word lists; Expert retains specialist vocabulary. Each difficulty has a persistent shuffled
 bag with no automatic repeats until exhausted. Deliberately choosing a custom
 secret may repeat. Run `npm run setup:vectors` if assets are missing (one-time download of about
 325 MB plus vocabulary and WordNet data). Hosted images require the bundled

@@ -42,9 +42,34 @@ test("independent everyday topics have sensible related and unrelated neighbors"
 test("expanded vocabulary retains thousands of answers without rare-noun loopholes", () => {
   assert.equal(lexicon.length, 30_000);
   assert.ok(contextWordPool.length > 2000);
-  for (const word of ["dead", "found", "national", "following", "people", "government", "innovation", "john", "mike", "well"]) assert.ok(!contextWordPool.includes(word), `${word} must not become a secret through an obscure noun sense`);
+  for (const word of ["dead", "found", "national", "following", "people", "government", "innovation", "john", "mike", "well", "bracing", "coping", "grinding"]) assert.ok(!contextWordPool.includes(word), `${word} must not become a secret through an obscure noun sense`);
   for (const word of ["tiger", "bucket", "pail", "sandcastle", "seashell"]) assert.ok(contextDifficultyPools.easy.includes(word));
   assert.ok(lexicon.includes("dead"), "non-noun clues can still be guesses");
+});
+
+test("playtest answers have honest topic associations and specialist nouns stay out of Standard", () => {
+  for (const [target, related, cold] of [
+    ["infield", "baseball", "farm"], ["whiskey", "drink", "horse"],
+    ["pew", "church", "room"], ["coffin", "funeral", "cart"],
+  ]) {
+    assert.ok(rank(target!, related!) < 30);
+    assert.ok(similarity(target!, related!) > similarity(target!, cold!) + .15);
+    assert.ok(similarity(target!, cold!) < .25);
+  }
+  for (const word of ["infield", "pew", "outfield", "chancel", "thyroid"]) {
+    assert.ok(!contextDifficultyPools.normal.includes(word), word);
+    assert.ok(contextDifficultyPools.hard.includes(word), word);
+  }
+  for (const word of ["whiskey", "coffin", "beer", "broom", "kitten", "toothpaste"]) assert.ok(contextDifficultyPools.normal.includes(word), word);
+});
+
+test("new automatic hunts default to familiar Easy answers", () => {
+  const game = new GameService();
+  try {
+    game.startContext();
+    assert.equal(game.state.contextDifficulty, "easy");
+    assert.ok(contextDifficultyPools.easy.includes(game.state.target!));
+  } finally { game.dispose(); }
 });
 
 test("a familiar compound can be guessed with natural spacing", () => {

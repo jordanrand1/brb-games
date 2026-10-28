@@ -252,3 +252,28 @@ test("changing the semantic model redraws legacy rounds without a loss or lost e
   assert.notEqual(restored.game.pausedAt, null);
   assert.equal(db.loadSnapshot("101").state.contextModelId, semanticModel.id);
 });
+
+test("answer-pool reviews replace removed live answers while retaining valid games and earned credit", (t) => {
+  const { db, cleanup } = fixture(t), rooms = new Rooms(db, options); cleanup.push(() => rooms.dispose());
+  const room = rooms.get("101"); room.game.startContext("tiger", 120, { difficulty: "normal" });
+  room.game.state.contextDifficulty = "normal";
+  room.game.state.target = "bracing";
+  room.game.state.contextStreak = 2;
+  room.game.state.contextSessionScores = [{ login: "solver", displayName: "Solver", points: 80, solves: 0, biggestLeaps: 1, pathfinders: 1, rounds: 1 }];
+  rooms.release("101");
+  const restored = rooms.get("101");
+  assert.notEqual(restored.game.state.target, "bracing");
+  assert.equal(restored.game.state.contextDifficulty, "normal");
+  assert.equal(restored.game.state.contextStreak, 2);
+  assert.equal(restored.game.state.contextSessionScores[0]?.points, 80);
+  assert.equal(restored.game.state.durationSeconds, 120);
+  assert.notEqual(restored.game.pausedAt, null);
+  restored.game.startContext("tiger", 120, { difficulty: "easy" });
+  restored.game.chatGuess("player", "Player", "lion");
+  const roundId = restored.game.state.contextRoundId;
+  rooms.release("101");
+  const valid = rooms.get("101");
+  assert.equal(valid.game.state.contextRoundId, roundId);
+  assert.equal(valid.game.state.target, "tiger");
+  assert.equal(valid.game.state.contextGuesses[0]?.word, "lion");
+});

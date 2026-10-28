@@ -105,6 +105,7 @@ if ([pretrainedVectorsPath, pretrainedWordsPath, modelPath].some(existsSync)) {
   }
 }
 export const semanticModel = { id: model.id, label: model.label, license: model.license };
+export const contextPoolId = model.targetSha256 || "seed-v1";
 
 export const lexicon = [...vectors.keys()].sort();
 export const wordVectors: ReadonlyMap<string, ArrayLike<number>> = vectors;

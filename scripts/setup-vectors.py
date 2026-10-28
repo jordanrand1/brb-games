@@ -44,6 +44,8 @@ side front back addition result response source effect position system art relat
 whole situation structure form work works parts arms housing assembly setting
 volume unit supply ground ways remains female male state john mike news public
 national general local official following found dead government people company
+bracing coping filling grinding loading packing clearing facing modernism innovation
+whereabouts midst affinity impetus resonance consequence derivation duplication etcetera
 fuck shit piss porn pornography penis vagina semen asshole bastard
 """.split())
 
@@ -140,6 +142,40 @@ def quality_check(vectors: dict[str, bytes]) -> None:
             raise RuntimeError(f"Semantic quality check failed: {target}/{related}/{unrelated}. Refusing to install this model.")
 
 
+def partition_targets(answers: list[str], available: set[str]) -> dict:
+    easy_words = set((ROOT / "scripts" / "easy-nouns.txt").read_text().split())
+    standard_words = set((ROOT / "scripts" / "standard-nouns.txt").read_text().split())
+    eligible = list(dict.fromkeys(word for word in answers if word in available and word not in EXCLUDED_TARGETS))
+    return {"version": 4,
+        "easy": [word for word in eligible if word in easy_words],
+        "normal": [word for word in eligible if word in standard_words and word not in easy_words],
+        "hard": [word for word in eligible if word not in easy_words | standard_words]}
+
+
+def write_targets(targets: dict, manifest: dict) -> None:
+    if len(targets["easy"]) < 300 or len(targets["normal"]) < 300 or sum(len(targets[key]) for key in ("easy", "normal", "hard")) < 1500:
+        raise RuntimeError("Too few reviewed answers. Refusing to replace the installed pools.")
+    pools = json.dumps(targets, separators=(",", ":")).encode()
+    manifest["targetCount"] = sum(len(targets[key]) for key in ("easy", "normal", "hard"))
+    manifest["targetSha256"] = hashlib.sha256(pools).hexdigest()
+    for path, content in [(OUTPUT_TARGETS, pools), (OUTPUT_MODEL, json.dumps(manifest, indent=2).encode() + b"\n")]:
+        temporary = path.with_suffix(path.suffix + ".tmp")
+        temporary.write_bytes(content)
+        temporary.replace(path)
+    print("Answer pools: " + ", ".join(f"{key} {len(targets[key])}" for key in ("easy", "normal", "hard")))
+
+
+def refresh_targets() -> None:
+    """Review the existing pool without downloading or changing vectors/ranks."""
+    manifest = json.loads(OUTPUT_MODEL.read_text())
+    for path, key in [(OUTPUT_VECTORS, "vectorSha256"), (OUTPUT_WORDS, "vocabSha256"), (OUTPUT_TARGETS, "targetSha256")]:
+        if hashlib.sha256(path.read_bytes()).hexdigest() != manifest[key]:
+            raise RuntimeError("Installed data failed verification. Rebuild before refreshing pools.")
+    old = json.loads(OUTPUT_TARGETS.read_text())
+    answers = old["easy"] + old["normal"] + old["hard"]
+    write_targets(partition_targets(answers, set(json.loads(OUTPUT_WORDS.read_text()))), manifest)
+
+
 def build(model_path: Path, vocab_path: Path, wordnet_path: Path) -> None:
     frequency = json.loads(vocab_path.read_text(encoding="utf-8"))["tokens"]
     curated = set((ROOT / "scripts" / "easy-nouns.txt").read_text().split())
@@ -167,25 +203,24 @@ def build(model_path: Path, vocab_path: Path, wordnet_path: Path) -> None:
         raise RuntimeError("Too few common guess words. Refusing to replace the installed data.")
     quality_check(found)
     available = set(words)
-    easy = [word for word in answers if word in curated and word in available]
-    other = [word for word in answers if word not in curated and word in available]
-    middle = len(other) // 2
-    targets = {"version": 3, "easy": easy, "normal": other[:middle], "hard": other[middle:]}
-    if len(easy) < 300 or len(easy) + len(other) < 1500:
+    targets = partition_targets(answers, available)
+    target_count = sum(len(targets[key]) for key in ("easy", "normal", "hard"))
+    if len(targets["easy"]) < 300 or len(targets["normal"]) < 300 or target_count < 1500:
         raise RuntimeError("Too few verified noun answers. Refusing to replace the installed pools.")
     data = b"".join(found[word] for word in words)
     vocab = json.dumps(words, separators=(",", ":")).encode()
     pools = json.dumps(targets, separators=(",", ":")).encode()
     digest = hashlib.sha256(data).hexdigest()
     manifest = {"id": "numberbatch-en-19.08-" + digest[:12], "label": "ConceptNet Numberbatch 19.08", "dimensions": DIMENSIONS,
-        "vocabularySize": len(words), "targetCount": len(easy) + len(other), "source": MODEL_URL,
+        "vocabularySize": len(words), "targetCount": target_count, "source": MODEL_URL,
         "license": "CC-BY-SA-4.0", "vectorSha256": digest, "vocabSha256": hashlib.sha256(vocab).hexdigest(),
         "targetSha256": hashlib.sha256(pools).hexdigest()}
     for path, content in [(OUTPUT_VECTORS, data), (OUTPUT_WORDS, vocab), (OUTPUT_TARGETS, pools), (OUTPUT_MODEL, json.dumps(manifest, indent=2).encode() + b"\n")]:
         temporary = path.with_suffix(path.suffix + ".tmp")
         temporary.write_bytes(content)
         temporary.replace(path)
-    print(f"Installed {len(words):,} local guess words and {manifest['targetCount']:,} answers: Easy {len(easy)}, Standard {middle}, Hard {len(other)-middle}.")
+    print(f"Installed {len(words):,} local guess words and {manifest['targetCount']:,} answers.")
+    print("Answer pools: " + ", ".join(f"{key} {len(targets[key])}" for key in ("easy", "normal", "hard")))
     print("Association quality checks passed. No API is used to score guesses.")
 
 
@@ -195,7 +230,11 @@ def main() -> None:
     parser.add_argument("--vocab", type=Path, help="Previously downloaded GloVe vocab.json used only for frequency ordering.")
     parser.add_argument("--wordnet-zip", type=Path, help="Previously downloaded WordNet 3.0 zip.")
     parser.add_argument("--rebuild", action="store_true", help="Rebuild already installed data.")
+    parser.add_argument("--refresh-targets", action="store_true", help="Reclassify installed answers without redownloading or changing ranks.")
     args = parser.parse_args()
+    if args.refresh_targets:
+        refresh_targets()
+        return
     if not args.rebuild and not any([args.source, args.vocab, args.wordnet_zip]) and all(path.exists() for path in [OUTPUT_VECTORS, OUTPUT_WORDS, OUTPUT_TARGETS, OUTPUT_MODEL]):
         print("Local commonsense data is already installed. Use --rebuild to regenerate it.")
         return

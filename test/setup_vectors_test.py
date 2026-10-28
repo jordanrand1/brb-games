@@ -10,6 +10,13 @@ spec.loader.exec_module(module)
 
 
 class AnswerFilterTests(unittest.TestCase):
+    def test_reviewed_standard_pool_not_corpus_frequency_defines_difficulty(self):
+        words = "tiger whiskey coffin pew infield bracing coping grinding toothpaste kitten".split()
+        pools = module.partition_targets(words, set(words))
+        self.assertEqual(pools["easy"], ["tiger"])
+        self.assertEqual(pools["normal"], ["whiskey", "coffin", "toothpaste", "kitten"])
+        self.assertEqual(pools["hard"], ["pew", "infield"])
+
     def test_primary_pos_concrete_sense_names_and_inflections(self):
         data = "\n".join([
             "00000001 14 n 01 dead 0 | deceased people",

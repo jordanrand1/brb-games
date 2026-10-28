@@ -3,10 +3,10 @@
   "label": "ConceptNet Numberbatch 19.08",
   "dimensions": 300,
   "vocabularySize": 30000,
-  "targetCount": 2320,
+  "targetCount": 2302,
   "source": "https://conceptnet.s3.amazonaws.com/downloads/2019/numberbatch/numberbatch-en-19.08.txt.gz",
   "license": "CC-BY-SA-4.0",
   "vectorSha256": "e52eacebe47551017ca6c88e68566a1a0eaca43ab3b1670f4ba81a0a6ccbce6c",
   "vocabSha256": "6ee61358bebb94ac93500f126af8ac35b79460f20621d721a510d525c864f934",
-  "targetSha256": "48251500a3bdf2c54ca6b906d439b3834e562110cd34300f598b2bf1042f2fa2"
+  "targetSha256": "f86a267415ec130c218581ed68f9ce6a1ba3115a3c7778c14fd9caab408cb8e6"
 }

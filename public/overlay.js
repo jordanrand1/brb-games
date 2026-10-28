@@ -3,6 +3,18 @@ document.body.classList.toggle("embedded-preview", new URLSearchParams(location.
 const escapeHtml = (value) => String(value ?? "").replace(/[&<>"']/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[char]);
 let lastState = null;
 
+function guessHeat(entry, exact, ai) {
+  if (exact) return "solved";
+  const score = Number.isFinite(entry.similarity) ? entry.similarity : 0;
+  if (ai) return score >= .75 ? "hot" : score >= .55 ? "warm" : score >= .3 ? "cool" : "cold";
+  // Rank is relative to this word's neighbors. A weak 17% association must
+  // stay cold even if it happens to be the best submitted guess.
+  if (entry.rank <= 10 && score >= .5) return "hot";
+  if (entry.rank <= 250 && score >= .3) return "warm";
+  if (entry.rank <= 1500 && score >= .2) return "cool";
+  return "cold";
+}
+
 function fitOverlay() {
   const card = document.querySelector(".overlay-card:not(.hidden)");
   if (!card) return;
@@ -57,7 +69,7 @@ function render(state) {
       $("#context-answer-by").textContent = state.winner ? "Solved by " + state.winner : "A fresh hunt is coming up.";
     }
     $("#context-round").textContent = "R" + String(state.round || 1).padStart(2, "0");
-    $("#context-difficulty-badge").textContent = state.contextDifficulty === "normal" ? "STANDARD" : (state.contextDifficulty || "normal").toUpperCase();
+    $("#context-difficulty-badge").textContent = state.contextDifficulty === "normal" ? "STANDARD" : state.contextDifficulty === "hard" ? "EXPERT" : "EASY";
     const community = state.community || {};
     $("#overlay-record-streak").textContent = "BEST STREAK " + (community.bestStreak || 0);
     $("#overlay-record-wins").textContent = (community.wins || 0) + (community.wins === 1 ? " WIN" : " WINS");
@@ -78,22 +90,26 @@ function render(state) {
     $("#context-streak-footer").textContent = String(streak);
     const sameRound = previousState?.kind === "context" && previousState.startedAt === state.startedAt;
     const previousLatest = sameRound ? Math.max(0, ...(previousState.contextGuesses || []).map((entry) => entry.at)) : 0;
+    const bestHeat = guesses.length ? guessHeat(guesses[0], false, state.semanticMode === "ai") : null;
+    const direction = $("#context-direction");
+    direction.classList.toggle("hidden", finished || !guesses.length);
+    direction.dataset.heat = bestHeat || "cold";
+    direction.textContent = bestHeat === "cold" ? "Still cold · try a different topic"
+      : bestHeat === "cool" ? "A weak connection · keep exploring other topics too"
+        : bestHeat === "warm" ? "Getting warmer · explore related words"
+          : "Strong connection · explore this topic";
     $("#overlay-guesses").innerHTML = guesses.length ? guesses.slice(0, 5).map((entry, index) => {
       const exact = finished && entry.word === state.target;
       const hasScore = exact || Number.isFinite(entry.similarity);
       const percentage = exact ? 100 : Math.round(Math.max(0, Math.min(1, entry.similarity || 0)) * 100);
-      // Local rank is the comparable progress signal. Different embedding
-      // models have different cosine ranges; a top-100 guess should look warm.
-      const heat = exact ? "solved" : state.semanticMode !== "ai"
-        ? entry.rank <= 10 ? "hot" : entry.rank <= 250 ? "warm" : entry.rank <= 1500 ? "cool" : "cold"
-        : percentage >= 75 ? "hot" : percentage >= 55 ? "warm" : percentage >= 30 ? "cool" : "cold";
+      const heat = guessHeat(entry, exact, state.semanticMode === "ai");
       const heatLabel = exact ? "FOUND IT" : percentage >= 75 ? "SO CLOSE" : percentage >= 55 ? "WARMING UP" : percentage >= 30 ? "GETTING CLOSER" : "KEEP HUNTING";
       const rankLabel = state.semanticMode === "ai" ? heatLabel : "RANK #" + entry.rank;
       const classes = "hunt-guess heat-" + heat + (index === 0 ? " leader" : "") + (entry.at > previousLatest ? " fresh" : "");
       const scoreText = hasScore ? percentage + "<small>%</small>" : "#" + entry.rank;
       return '<div class="' + classes + '" style="--closeness:' + percentage + '%">' +
         '<div class="hunt-guess-top"><span class="guess-place">' + String(index + 1).padStart(2, "0") + '</span>' +
-        '<div class="guess-info"><div class="guess-word-line"><strong>' + escapeHtml(entry.word) + '</strong>' + (index === 0 ? '<b class="closest-badge">CLOSEST</b>' : '') + '</div><span class="guess-viewer">' + escapeHtml(entry.by) + '</span></div>' +
+        '<div class="guess-info"><div class="guess-word-line"><strong>' + escapeHtml(entry.word) + '</strong>' + (index === 0 ? '<b class="closest-badge">' + (exact ? 'SOLVED' : heat === 'cold' ? 'BEST SO FAR · COLD' : heat === 'cool' ? 'BEST SO FAR · WEAK' : heat.toUpperCase()) + '</b>' : '') + '</div><span class="guess-viewer">' + escapeHtml(entry.by) + '</span></div>' +
         '<div class="guess-score"><strong>' + scoreText + '</strong><span>' + rankLabel + '</span></div></div>' +
         '<div class="guess-meter" role="progressbar" aria-label="' + escapeHtml(entry.word) + ' similarity" aria-valuemin="0" aria-valuemax="100"' + (hasScore ? ' aria-valuenow="' + percentage + '"' : ' aria-valuetext="Similarity unavailable"') + '><i></i><i></i><i></i><span class="guess-meter-fill"><b></b></span></div></div>';
     }).join("") : '<div class="hunt-empty"><span class="empty-crosshair" aria-hidden="true">◎</span><strong>Who’s got the first guess?</strong><span>Type a noun in chat. Watch the bars heat up.</span></div>';

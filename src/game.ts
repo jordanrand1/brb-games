@@ -1,4 +1,4 @@
-import { contextWordPool, contextDifficultyPools, targetDifficulty, getWordRank, getWordSimilarity, isSupportedWord, lexicon, normalizeWord, wordleAnswers, wordleWords, semanticModel, type ContextDifficulty } from "./embeddings.ts";
+import { contextWordPool, contextDifficultyPools, targetDifficulty, getWordRank, getWordSimilarity, isSupportedWord, lexicon, normalizeWord, wordleAnswers, wordleWords, semanticModel, contextPoolId, type ContextDifficulty } from "./embeddings.ts";
 import { randomUUID } from "node:crypto";
 import { CommunityStore, addAward, type ContributionAward, type ContributorScore } from "./community-store.ts";
 
@@ -33,6 +33,7 @@ export type GameState = {
   contextLevelProgress: number;
   contextRoundId: string | null;
   contextModelId: string;
+  contextPoolId: string;
   contextDifficulty: ContextDifficulty;
   contextNextDifficulty: ContextDifficulty;
   contextClutchEnabled: boolean;
@@ -65,7 +66,7 @@ function freshState(): GameState {
     target: null, winner: null, message: "Pick a game to bring chat together.", contextGuesses: [], players: {},
     krillionPrompt: null, krillionAnswers: [], krillionJudged: false,
     contextStreak: 0, contextLevel: 1, contextLevelProgress: 0,
-    contextRoundId: null, contextModelId: semanticModel.id, contextDifficulty: "normal", contextNextDifficulty: "normal",
+    contextRoundId: null, contextModelId: semanticModel.id, contextPoolId, contextDifficulty: "easy", contextNextDifficulty: "easy",
     contextClutchEnabled: true, contextClutchSeconds: 0, contextClutchUsers: [], contextClutchEvent: null,
     contextAwards: [], contextSessionScores: [],
   };
@@ -116,14 +117,20 @@ export class GameService {
     if (!saved?.state || !["idle", "context", "wordle", "krillion"].includes(saved.state.kind)) throw new Error("Invalid saved game.");
     this.state = { ...freshState(), ...saved.state };
     this.pausedAt = saved.pausedAt ?? saved.savedAt;
-    if (this.state.kind === "context" && saved.state.contextModelId !== semanticModel.id) {
+    const modelChanged = saved.state.contextModelId !== semanticModel.id;
+    const answerRemoved = this.state.kind === "context" && this.state.phase === "playing"
+      && !contextDifficultyPools[this.state.contextDifficulty]?.includes(this.state.target!);
+    if (this.state.kind === "context" && (modelChanged || answerRemoved)) {
       // Stored ranks from another vocabulary/model cannot be mixed with new
       // scores. Preserve earned records, streak and session points; redraw
       // without recording a loss, and wait for a browser/source to reconnect.
       this.startNextContextRound();
-      this.state.message = "Word associations were upgraded. A fresh word is ready; your earned points and streak are kept.";
+      this.state.message = modelChanged
+        ? "Word associations were upgraded. A fresh word is ready; your earned points and streak are kept."
+        : "The answer pool was reviewed. A fresh word is ready; your earned points and streak are kept.";
       this.pausedAt = Date.now();
     }
+    this.state.contextPoolId = contextPoolId;
     if (this.state.phase === "judging") {
       this.state.phase = "round-complete";
       this.state.message = "Judging was interrupted. The request may have been billed; it will not be repeated automatically.";
@@ -156,8 +163,8 @@ export class GameService {
 
   startContext(secret?: string, durationSeconds = 60, options: ContextOptions = {}): void {
     this.pausedAt = null;
-    const difficulty = options.difficulty || "normal";
-    if (!["easy", "normal", "hard"].includes(difficulty)) throw new Error("Choose Easy, Standard, or Hard difficulty.");
+    const difficulty = options.difficulty || "easy";
+    if (!["easy", "normal", "hard"].includes(difficulty)) throw new Error("Choose Easy, Standard, or Expert difficulty.");
     const manualWord = secret ? normalizeWord(secret) : undefined;
     if (manualWord && (!isSupportedWord(manualWord) || !contextWordPool.includes(manualWord))) throw new Error("Choose a supported concrete noun for the secret word.");
     const actualDifficulty = manualWord ? targetDifficulty(manualWord) : difficulty;
@@ -236,7 +243,7 @@ export class GameService {
     }
     const choices = state.kind === "context" ? [30, 45, 60, 120, 180, 300] : [30, 45, 60];
     if (!choices.includes(durationSeconds)) throw new Error("Choose one of the available round durations.");
-    if (options.difficulty && !["easy", "normal", "hard"].includes(options.difficulty)) throw new Error("Choose Easy, Standard, or Hard difficulty.");
+    if (options.difficulty && !["easy", "normal", "hard"].includes(options.difficulty)) throw new Error("Choose Easy, Standard, or Expert difficulty.");
     state.durationSeconds = durationSeconds;
     if (state.kind === "context") {
       if (options.difficulty) state.contextNextDifficulty = options.difficulty;
@@ -521,6 +528,7 @@ export class GameService {
     this.state.contextDifficulty = difficulty;
     this.state.contextRoundId = randomUUID();
     this.state.contextModelId = semanticModel.id;
+    this.state.contextPoolId = contextPoolId;
     this.state.phase = "playing";
     this.state.winner = null;
     this.state.contextGuesses = [];
