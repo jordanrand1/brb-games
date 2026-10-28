@@ -91,13 +91,18 @@ test("rooms isolate live games; idle pause and recreation preserve remaining tim
   one.game.startContext("tiger"); two.game.startContext("tree");
   one.game.chatGuess("a", "A", "tiger");
   assert.equal(one.game.state.winner, "A"); assert.equal(two.game.state.winner, null);
-  const twoTarget = two.game.state.target, remaining = two.game.state.endsAt! - Date.now();
+  const twoTarget = two.game.state.target;
   one.idleSince = Date.now() - 2000; two.idleSince = Date.now() - 2000;
   rooms.sweep(); assert.equal(rooms.rooms.size, 0);
+  // Measure the actual pause instant. Database writes during release can take
+  // over 100 ms on CI, and the round is still running until pause() executes.
+  const remaining = two.game.state.endsAt! - two.game.pausedAt!;
   const restored = rooms.get("202"); assert.equal(restored.game.state.target, twoTarget); assert.ok(restored.game.pausedAt);
+  assert.equal(restored.game.state.endsAt! - restored.game.pausedAt!, remaining);
   restored.game.advanceIfDue(); assert.equal(restored.game.state.round, 1);
-  restored.game.resume(Date.now() + 120_000);
-  assert.ok(Math.abs((restored.game.state.endsAt! - (Date.now() + 120_000)) - remaining) < 100);
+  const resumedAt = Date.now() + 120_000;
+  restored.game.resume(resumedAt);
+  assert.equal(restored.game.state.endsAt! - resumedAt, remaining);
 });
 
 test("SSE changes stay in their channel and full snapshots resynchronize clients", (t) => {
