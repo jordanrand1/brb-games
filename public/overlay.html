@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="theme-color" content="#000000">
+  <title>BRB Arcade Overlay</title>
+  <link rel="stylesheet" href="/overlay.css">
+</head>
+<body>
+  <main id="overlay-root" class="overlay-root">
+    <section id="waiting-card" class="overlay-card waiting-card">
+      <div class="mini-brand"><span class="brand-mark">b</span><span>BRB ARCADE</span></div>
+      <p>Chat game loading</p>
+      <div class="waiting-pips"><i></i><i></i><i></i></div>
+    </section>
+    <section id="context-card" class="overlay-card game-card-overlay hidden">
+      <header class="overlay-header hunt-header"><div><span class="overlay-eyebrow"><span class="hunt-mark" aria-hidden="true">◉</span> SEMANTIC HUNT <b id="context-round">R01</b><b id="context-difficulty-badge" class="difficulty-badge">STANDARD</b></span><h1>Hunt the word<span>.</span></h1><p class="hunt-subtitle">One secret noun. All of chat.</p></div><div id="context-timer" class="hunt-timer"><div><strong id="context-clock">1:00</strong><span id="context-clock-label">TIME LEFT</span></div></div></header>
+      <div class="context-hype"><div class="context-hype-top"><span>CHAT STREAK <b id="context-streak-footer">0</b></span><strong id="context-hype-level">LEVEL 1</strong></div><div class="context-hype-track"><span id="context-hype-fill"></span><i></i><i></i></div><div class="context-hype-foot"><span id="context-hype-wins">0 consecutive wins</span><span id="context-hype-progress">0 / 3 TO LEVEL UP</span></div></div>
+      <div id="context-answer" class="context-answer hidden" aria-live="polite"><span id="context-answer-label">THE WORD WAS</span><strong id="context-answer-word"></strong><span id="context-answer-by"></span><div class="answer-sparks" aria-hidden="true">✦ <i>✧</i> ✦</div></div>
+      <div id="context-awards" class="hunt-awards hidden" aria-live="polite"></div>
+      <div id="context-clutch-banner" class="clutch-banner hidden" role="status"><strong>CLUTCH +5s</strong><span id="context-clutch-by"></span></div>
+      <div class="hunt-list-heading"><span><i></i> CLOSEST GUESSES <b id="guess-count">0</b></span><span id="context-score-label">CLOSENESS</span></div>
+      <div id="overlay-guesses" class="overlay-guesses"></div>
+      <div id="overlay-message" class="overlay-message hunt-activity">Every guess brings chat a little closer.</div>
+      <div class="hunt-community-records"><span>COMMUNITY RECORDS</span><b id="overlay-record-streak">BEST STREAK 0</b><b id="overlay-record-wins">0 WINS</b><b id="overlay-record-fastest">BEST —</b></div>
+      <footer class="overlay-footer hunt-footer"><span><b>PLAY ALONG</b> Type a word in chat</span><span class="mini-logo">BRB <i>ARCADE</i></span></footer>
+    </section>
+    <section id="wordle-card" class="overlay-card game-card-overlay hidden">
+      <header class="overlay-header"><div><span class="overlay-eyebrow coral"><i></i> LAST ONE STANDING</span><h1>Wordle race <span id="wordle-round"></span></h1></div><div class="overlay-count clock-count"><strong id="overlay-clock">45</strong><span>SECONDS</span></div></header>
+      <div id="wordle-message" class="overlay-message">Join the race with !join, then solve the word.</div>
+      <div id="overlay-players" class="overlay-players"></div>
+      <footer class="overlay-footer"><span>Use <b>!join</b> &nbsp;·&nbsp; Guess with <b>!guess WORD</b></span><span class="mini-logo">BRB <i>ARCADE</i></span></footer>
+    </section>
+    <section id="krillion-card" class="overlay-card game-card-overlay hidden">
+      <header class="overlay-header"><div><span class="overlay-eyebrow krillion-eyebrow"><i></i> KRILLION</span><h1>Think of an answer</h1></div><div class="overlay-count krillion-count"><strong id="krillion-clock">30</strong><span>SECONDS</span></div></header>
+      <div id="krillion-question" class="krillion-question"></div>
+      <div id="krillion-message" class="overlay-message">One answer per viewer. Submit with !answer.</div>
+      <div class="krillion-meta"><span id="krillion-entries-count">0 answers locked in</span><span>ONE ANSWER EACH</span></div>
+      <div id="krillion-results" class="krillion-results"></div>
+      <footer class="overlay-footer"><span>Type <b>!answer YOUR ANSWER</b> in chat</span><span class="mini-logo">BRB <i>ARCADE</i></span></footer>
+    </section>
+  </main>
+  <script type="module" src="/overlay.js"></script>
+</body>
+</html>

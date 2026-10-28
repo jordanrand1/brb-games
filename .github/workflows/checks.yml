@@ -1,0 +1,19 @@
+name: Checks
+on: [push, pull_request]
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - run: npm test
+      - run: node --check public/app.js && node --check public/overlay.js && node --check public/operator.js
+      - run: npm run test:load
+      - run: docker build -t brb-beta-check .
+      - run: docker run --rm --network none --memory=512m --cpus=0.5 -e NODE_ENV=development -e BRB_SKIP_ENV_FILE=1 -e PUBLIC_BASE_URL=http://localhost:8787 --mount type=bind,source=${{ github.workspace }}/test,target=/app/test,readonly brb-beta-check node /app/test/container-smoke.mjs
