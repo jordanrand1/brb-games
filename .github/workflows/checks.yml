@@ -13,6 +13,7 @@ jobs:
           cache: npm
       - run: npm ci --ignore-scripts
       - run: npm test
+      - run: npm run test:setup
       - run: node --check public/app.js && node --check public/overlay.js && node --check public/operator.js
       - run: npm run test:load
       - run: docker build -t brb-beta-check .

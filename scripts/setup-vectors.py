@@ -1,26 +1,30 @@
 #!/usr/bin/env python3
-"""Install a compact, local subset of public-domain GloVe vectors."""
+"""Build a compact, local commonsense model and concrete-noun answer pools."""
 
 import argparse
+import gzip
+import hashlib
 import json
+import math
 import re
+import shutil
 import struct
+import subprocess
 import tempfile
-import time
-import urllib.error
 import urllib.request
 import zipfile
 from pathlib import Path
 
-
-MODEL_URL = "https://huggingface.co/NeuML/glove-2024-wikigiga-quantized/resolve/main/model.safetensors?download=true"
+ROOT = Path(__file__).resolve().parents[1]
+MODEL_URL = "https://conceptnet.s3.amazonaws.com/downloads/2019/numberbatch/numberbatch-en-19.08.txt.gz"
 VOCAB_URL = "https://huggingface.co/NeuML/glove-2024-wikigiga-quantized/resolve/main/vocab.json?download=true"
 WORDNET_URL = "https://raw.githubusercontent.com/nltk/nltk_data/gh-pages/packages/corpora/wordnet.zip"
-ROOT = Path(__file__).resolve().parents[1]
-OUTPUT_VECTORS = ROOT / "src" / "glove-vectors.bin"
-OUTPUT_WORDS = ROOT / "src" / "glove-vocab.json"
+OUTPUT_VECTORS = ROOT / "src" / "local-vectors.bin"
+OUTPUT_WORDS = ROOT / "src" / "local-vocab.json"
 OUTPUT_TARGETS = ROOT / "src" / "context-targets.json"
-MAX_WORDS = 12_000
+OUTPUT_MODEL = ROOT / "src" / "semantic-model.json"
+MAX_WORDS = 30_000
+DIMENSIONS = 300
 STOP_WORDS = set("""
 a about above after again against all am an and any are as at be because been before
 being below between both but by can could did do does doing down during each few for
@@ -31,161 +35,180 @@ their theirs them themselves then there these they this those through to too und
 until up very was we were what when where which while who whom why will with would
 you your yours yourself yourselves also get got make made one two use used using
 """.split())
+# Broad, abstract, inflected, slang and misleading corpus words make poor secrets.
+# They remain valid guesses when present in the model.
+EXCLUDED_TARGETS = set("""
+thing object entity place area part type kind stuff substance material matter piece
+point sort issue case phenomenon creation innovation invention collection end top
+side front back addition result response source effect position system art relation
+whole situation structure form work works parts arms housing assembly setting
+volume unit supply ground ways remains female male state john mike news public
+national general local official following found dead government people company
+fuck shit piss porn pornography penis vagina semen asshole bastard
+""".split())
 
 
-def download(url: str, path: Path) -> None:
-    request = urllib.request.Request(url, headers={"User-Agent": "BRB-Arcade/0.1 vector-setup"})
-    partial = path.with_suffix(path.suffix + ".part")
-    for attempt in range(1, 4):
-        try:
-            print(f"Downloading {path.name} (attempt {attempt}/3)…", flush=True)
-            with urllib.request.urlopen(request, timeout=60) as response, partial.open("wb") as output:
-                total = int(response.headers.get("Content-Length", "0"))
-                received = 0
-                while chunk := response.read(1024 * 1024):
-                    output.write(chunk)
-                    received += len(chunk)
-                    if total:
-                        print(f"\r  {received / total:.0%}", end="", flush=True)
-            print()
-            partial.replace(path)
-            return
-        except (OSError, urllib.error.URLError) as error:
-            partial.unlink(missing_ok=True)
-            if attempt == 3:
-                raise RuntimeError(f"Could not download {path.name}. Check your internet connection and retry.") from error
-            print(f"\nDownload failed: {error}. Retrying in 2 seconds…", flush=True)
-            time.sleep(2)
-
-
-def tensors(model_path: Path) -> tuple[dict, memoryview, memoryview]:
-    data = model_path.read_bytes()
-    header_size = struct.unpack_from("<Q", data, 0)[0]
-    header_end = 8 + header_size
-    header = json.loads(data[8:header_end])
-    payload = memoryview(data)[header_end:]
-    codebook_info = header["codewords"]
-    code_offset = codebook_info["data_offsets"][0]
-    code_size = codebook_info["data_offsets"][1] - code_offset
-    codewords = memoryview(payload[code_offset:code_offset + code_size])
-    vector_info = header["vectors"]
-    vector_offset = vector_info["data_offsets"][0]
-    vector_bytes = payload[vector_offset:vector_info["data_offsets"][1]]
-    if codebook_info["shape"] != [10, 256, 30] or vector_info["shape"][1] != 10:
-        raise RuntimeError("The downloaded GloVe model has an unexpected vector format.")
-    return header, codewords, vector_bytes
-
-
-def main() -> None:
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--local-dir", type=Path, help="Use previously downloaded model.safetensors and vocab.json from this directory.")
-    parser.add_argument("--wordnet-zip", type=Path, help="Use a previously downloaded WordNet 3.0 zip file.")
-    args = parser.parse_args()
-
-    OUTPUT_VECTORS.parent.mkdir(parents=True, exist_ok=True)
-    if args.local_dir:
-        model_path = args.local_dir / "model.safetensors"
-        vocab_path = args.local_dir / "vocab.json"
-        if not model_path.is_file() or not vocab_path.is_file():
-            raise SystemExit("Expected model.safetensors and vocab.json in --local-dir.")
-        build_subset(model_path, vocab_path)
-        words = json.loads(OUTPUT_WORDS.read_text(encoding="utf-8"))
-    elif OUTPUT_VECTORS.is_file() and OUTPUT_WORDS.is_file():
-        words = json.loads(OUTPUT_WORDS.read_text(encoding="utf-8"))
+def download(url: str, destination: Path) -> None:
+    """Use the system TLS configuration; never disable certificate verification."""
+    partial = destination.with_suffix(destination.suffix + ".part")
+    print(f"Downloading {destination.name}…", flush=True)
+    if shutil.which("curl"):
+        subprocess.run(["curl", "-fL", "--retry", "2", "--connect-timeout", "30", "--max-time", "600", url, "-o", str(partial)], check=True)
     else:
-        with tempfile.TemporaryDirectory(prefix="brb-glove-") as temporary:
-            temporary_path = Path(temporary)
-            model_path = temporary_path / "model.safetensors"
-            vocab_path = temporary_path / "vocab.json"
-            download(MODEL_URL, model_path)
-            download(VOCAB_URL, vocab_path)
-            build_subset(model_path, vocab_path)
-            words = json.loads(OUTPUT_WORDS.read_text(encoding="utf-8"))
-
-    if args.wordnet_zip:
-        targets = build_noun_targets(words, args.wordnet_zip)
-    else:
-        with tempfile.TemporaryDirectory(prefix="brb-wordnet-") as temporary:
-            wordnet_path = Path(temporary) / "wordnet.zip"
-            download(WORDNET_URL, wordnet_path)
-            targets = build_noun_targets(words, wordnet_path)
-    temporary_targets = OUTPUT_TARGETS.with_suffix(".json.tmp")
-    temporary_targets.write_text(json.dumps(targets, separators=(",", ":")), encoding="utf-8")
-    temporary_targets.replace(OUTPUT_TARGETS)
-    print(f"Installed {sum(len(targets[key]) for key in ['easy', 'normal', 'hard']):,} concrete noun targets: " + ", ".join(f"{key} {len(targets[key]):,}" for key in ['easy', 'normal', 'hard']))
+        request = urllib.request.Request(url, headers={"User-Agent": "BRB-Arcade/vector-setup"})
+        with urllib.request.urlopen(request, timeout=90) as source, partial.open("wb") as output:
+            shutil.copyfileobj(source, output)
+    partial.replace(destination)
 
 
-def build_subset(model_path: Path, vocab_path: Path) -> None:
-    print("Reading compact GloVe model and vocabulary…", flush=True)
-    header, codewords_data, quantized_vectors = tensors(model_path)
-    codewords = struct.unpack(f"<{len(codewords_data) // 4}f", codewords_data)
-    tokens = json.loads(vocab_path.read_text(encoding="utf-8"))["tokens"]
-    words: list[str] = []
-    temporary_vectors = OUTPUT_VECTORS.with_suffix(".bin.tmp")
-    temporary_words = OUTPUT_WORDS.with_suffix(".json.tmp")
+def noun_candidates(archive_path: Path, frequency: dict[str, int], curated: set[str]) -> list[str]:
+    """Require a physical noun's primary sense and predominant noun usage.
 
-    with temporary_vectors.open("wb") as output:
-        # The source vocabulary is frequency ordered; retain common, ordinary
-        # single words and omit punctuation, names with symbols, and stop words.
-        for word, index in tokens.items():
-            if not re.fullmatch(r"[a-z]{3,20}", word) or word in STOP_WORDS:
-                continue
-            if index < 0 or index * 10 + 10 > len(quantized_vectors):
-                continue
-            codes = quantized_vectors[index * 10:index * 10 + 10]
-            vector: list[float] = []
-            for part, code in enumerate(codes):
-                start = (part * 256 + code) * 30
-                vector.extend(codewords[start:start + 30])
-            output.write(struct.pack("<300f", *vector))
-            words.append(word)
-            if len(words) >= MAX_WORDS:
-                break
-
-    if len(words) < 5_000:
-        temporary_vectors.unlink(missing_ok=True)
-        raise RuntimeError(f"Only found {len(words)} usable vectors; refusing to write an undersized model.")
-    temporary_words.write_text(json.dumps(words, separators=(",", ":")), encoding="utf-8")
-    temporary_vectors.replace(OUTPUT_VECTORS)
-    temporary_words.replace(OUTPUT_WORDS)
-    print(f"Installed {len(words):,} rankable words ({OUTPUT_VECTORS.stat().st_size / 1_000_000:.1f} MB).")
-
-
-def build_noun_targets(words: list[str], archive_path: Path) -> dict:
+    Having *any* noun sense is insufficient: 'dead', 'national', and 'found'
+    all have noun entries in WordNet. Named-person homonyms and inflections
+    are unsuitable automatic secrets even when they also name an object.
+    """
     with zipfile.ZipFile(archive_path) as archive:
-        categories = {"noun.animal", "noun.artifact", "noun.body", "noun.food", "noun.location", "noun.object", "noun.person", "noun.plant", "noun.substance", "noun.phenomenon", "noun.group", "noun.possession", "noun.shape"}
-        lexnames = {int(fields[0]) for line in archive.read("wordnet/lexnames").decode().splitlines() if (fields := line.split()) and fields[1] in categories}
-        concrete_synsets = {}
+        physical = {}
+        names = set()
         for line in archive.read("wordnet/data.noun").decode().splitlines():
             if not line or not line[0].isdigit():
                 continue
             fields = line.split("|", 1)[0].split()
-            if int(fields[1]) not in lexnames:
+            category = int(fields[1])
+            lemmas = {fields[4 + i * 2] for i in range(int(fields[3], 16))}
+            if category in {5, 6, 8, 13, 15, 17, 19, 20, 27}:
+                physical[fields[0]] = lemmas
+            if category == 18:
+                names.update(word.casefold() for word in lemmas if any(char.isupper() for char in word))
+        counts: dict[str, dict[str, int]] = {}
+        primary = {}
+        for line in archive.read("wordnet/index.sense").decode().splitlines():
+            key, offset, sense, tagged = line.split()
+            lemma, detail = key.rsplit("%", 1)
+            word, pos, count = lemma.casefold(), detail[0], int(tagged)
+            scores = counts.setdefault(word, {})
+            scores[pos] = scores.get(pos, 0) + count
+            if pos == "1":
+                candidate = (count, -int(sense), lemma == word, offset)
+                if word not in primary or candidate > primary[word]:
+                    primary[word] = candidate
+        inflections = set()
+        for path in ("wordnet/noun.exc", "wordnet/verb.exc"):
+            for line in archive.read(path).decode().splitlines():
+                parts = line.split()
+                if len(parts) > 1 and parts[0] not in parts[1:]:
+                    inflections.add(parts[0])
+    answers = set()
+    for word, (_, _, _, offset) in primary.items():
+        noun = counts[word].get("1", 0)
+        other = sum(count for pos, count in counts[word].items() if pos != "1")
+        if (not re.fullmatch(r"[a-z]{3,20}", word) or word in EXCLUDED_TARGETS
+                or word in STOP_WORDS or word in names or word in inflections
+                or word not in physical.get(offset, set()) or noun < 1
+                or noun < other or frequency.get(word, 10**9) > 200_000):
+            continue
+        # Singular answers make a close singular/plural guess easy to resolve.
+        singulars = [word[:-1]] if word.endswith("s") else []
+        if word.endswith("ies"):
+            singulars.append(word[:-3] + "y")
+        if word.endswith("es"):
+            singulars.append(word[:-2])
+        if any(singular in primary for singular in singulars):
+            continue
+        answers.add(word)
+    # Human-selected familiar nouns can intentionally resolve ambiguous senses
+    # (tiger, rose, watch) and natural plurals (pants, scissors, headphones).
+    answers.update(word for word in curated if re.fullmatch(r"[a-z]{3,20}", word) and word not in EXCLUDED_TARGETS)
+    return sorted(answers, key=lambda word: (frequency.get(word, 10**9), word))
+
+
+def quality_check(vectors: dict[str, bytes]) -> None:
+    def cosine(left: str, right: str) -> float:
+        a = struct.unpack("<300f", vectors[left])
+        b = struct.unpack("<300f", vectors[right])
+        return sum(x * y for x, y in zip(a, b)) / math.sqrt(sum(x*x for x in a) * sum(x*x for x in b))
+    comparisons = [
+        ("tiger", "lion", "space"), ("tiger", "jungle", "space"),
+        ("tiger", "animal", "space"), ("pail", "bucket", "space"),
+        ("pail", "sand", "space"), ("ocean", "sea", "computer"),
+        ("computer", "keyboard", "animal"), ("guitar", "piano", "potato"),
+        ("apple", "fruit", "rocket"),
+    ]
+    for target, related, unrelated in comparisons:
+        if cosine(target, related) <= cosine(target, unrelated) + .1:
+            raise RuntimeError(f"Semantic quality check failed: {target}/{related}/{unrelated}. Refusing to install this model.")
+
+
+def build(model_path: Path, vocab_path: Path, wordnet_path: Path) -> None:
+    frequency = json.loads(vocab_path.read_text(encoding="utf-8"))["tokens"]
+    curated = set((ROOT / "scripts" / "easy-nouns.txt").read_text().split())
+    answers = noun_candidates(wordnet_path, frequency, curated)
+    required = "tiger lion jungle animal space pail bucket sand beach pale ocean sea computer keyboard guitar piano potato apple fruit rocket".split()
+    ordered = list(dict.fromkeys(required + answers + [word for word, _ in sorted(frequency.items(), key=lambda item: item[1])
+        if re.fullmatch(r"[a-z]{3,20}", word) and word not in STOP_WORDS][:MAX_WORDS * 2]))
+    wanted = set(ordered)
+    found: dict[str, bytes] = {}
+    print("Reading commonsense vectors and checking vocabulary…", flush=True)
+    with gzip.open(model_path, "rt", encoding="utf-8") as source:
+        header = source.readline().split()
+        if len(header) != 2 or int(header[1]) != DIMENSIONS:
+            raise RuntimeError("Unexpected Numberbatch dimensions.")
+        for line in source:
+            word, _, values = line.partition(" ")
+            if word not in wanted:
                 continue
-            count = int(fields[3], 16)
-            concrete_synsets[fields[0]] = {fields[4 + i * 2] for i in range(count) if re.fullmatch(r"[a-z]{3,20}", fields[4 + i * 2])}
-        nouns = set()
-        for line in archive.read("wordnet/index.noun").decode().splitlines():
-            if not line or line[0].isspace():
-                continue
-            fields = line.split()
-            first_sense = fields[6 + int(fields[3])]
-            if fields[0] in concrete_synsets.get(first_sense, set()):
-                nouns.add(fields[0])
-    targets = [word for word in words if word in nouns and word not in STOP_WORDS]
-    if len(targets) < 1_000:
-        raise RuntimeError(f"Only found {len(targets)} noun targets. Refusing to replace the current list.")
-    # Curated everyday anchors make Easy useful despite the source corpus's
-    # news vocabulary. Frequency splits the remaining concrete nouns.
-    easy_candidates = set((ROOT / "scripts" / "easy-nouns.txt").read_text().split())
-    easy = [word for word in targets if word in easy_candidates]
-    remaining = [word for word in targets if word not in easy_candidates]
-    middle = len(remaining) // 2
-    return {"version": 2, "easy": easy, "normal": remaining[:middle], "hard": remaining[middle:]}
+            vector = [float(value) for value in values.split()]
+            if len(vector) != DIMENSIONS or not all(math.isfinite(value) for value in vector) or sum(x*x for x in vector) < 1e-10:
+                raise RuntimeError(f"Invalid vector for {word}.")
+            found[word] = struct.pack("<300f", *vector)
+    words = [word for word in ordered if word in found][:MAX_WORDS]
+    if len(words) < 20_000:
+        raise RuntimeError("Too few common guess words. Refusing to replace the installed data.")
+    quality_check(found)
+    available = set(words)
+    easy = [word for word in answers if word in curated and word in available]
+    other = [word for word in answers if word not in curated and word in available]
+    middle = len(other) // 2
+    targets = {"version": 3, "easy": easy, "normal": other[:middle], "hard": other[middle:]}
+    if len(easy) < 300 or len(easy) + len(other) < 1500:
+        raise RuntimeError("Too few verified noun answers. Refusing to replace the installed pools.")
+    data = b"".join(found[word] for word in words)
+    vocab = json.dumps(words, separators=(",", ":")).encode()
+    pools = json.dumps(targets, separators=(",", ":")).encode()
+    digest = hashlib.sha256(data).hexdigest()
+    manifest = {"id": "numberbatch-en-19.08-" + digest[:12], "label": "ConceptNet Numberbatch 19.08", "dimensions": DIMENSIONS,
+        "vocabularySize": len(words), "targetCount": len(easy) + len(other), "source": MODEL_URL,
+        "license": "CC-BY-SA-4.0", "vectorSha256": digest, "vocabSha256": hashlib.sha256(vocab).hexdigest(),
+        "targetSha256": hashlib.sha256(pools).hexdigest()}
+    for path, content in [(OUTPUT_VECTORS, data), (OUTPUT_WORDS, vocab), (OUTPUT_TARGETS, pools), (OUTPUT_MODEL, json.dumps(manifest, indent=2).encode() + b"\n")]:
+        temporary = path.with_suffix(path.suffix + ".tmp")
+        temporary.write_bytes(content)
+        temporary.replace(path)
+    print(f"Installed {len(words):,} local guess words and {manifest['targetCount']:,} answers: Easy {len(easy)}, Standard {middle}, Hard {len(other)-middle}.")
+    print("Association quality checks passed. No API is used to score guesses.")
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--source", type=Path, help="Previously downloaded numberbatch-en-19.08.txt.gz.")
+    parser.add_argument("--vocab", type=Path, help="Previously downloaded GloVe vocab.json used only for frequency ordering.")
+    parser.add_argument("--wordnet-zip", type=Path, help="Previously downloaded WordNet 3.0 zip.")
+    parser.add_argument("--rebuild", action="store_true", help="Rebuild already installed data.")
+    args = parser.parse_args()
+    if not args.rebuild and not any([args.source, args.vocab, args.wordnet_zip]) and all(path.exists() for path in [OUTPUT_VECTORS, OUTPUT_WORDS, OUTPUT_TARGETS, OUTPUT_MODEL]):
+        print("Local commonsense data is already installed. Use --rebuild to regenerate it.")
+        return
+    with tempfile.TemporaryDirectory(prefix="brb-vectors-") as directory:
+        temporary = Path(directory)
+        paths = []
+        for local, filename, url in [(args.source, "numberbatch-en-19.08.txt.gz", MODEL_URL), (args.vocab, "vocab.json", VOCAB_URL), (args.wordnet_zip, "wordnet.zip", WORDNET_URL)]:
+            path = local or temporary / filename
+            if not local:
+                download(url, path)
+            paths.append(path)
+        build(*paths)
 
 
 if __name__ == "__main__":
-    try:
-        main()
-    except RuntimeError as error:
-        raise SystemExit(f"Setup failed: {error}") from error
+    main()

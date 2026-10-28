@@ -7,7 +7,7 @@ const descriptions = {
   wordle: "A shared five-letter word, six guesses each. Solve before the timer to survive.",
 };
 const instructions = {
-  context: "Type a word directly in Twitch chat. Solver earns 100 points, Biggest Leap 50, and Pathfinder 30. Useful new best guesses must gain at least one similarity point. With clutch time enabled, a five-point improvement in the final ten seconds adds five seconds, once per viewer and up to fifteen seconds per round.",
+  context: "Type a word directly in Twitch chat. Known compounds like sand castle work too. Every guess is compared with the same secret. Solver earns 100 points, Biggest Leap 50, and Pathfinder 30. Useful new best guesses must gain at least one similarity point. With clutch time enabled, a five-point improvement in the final ten seconds adds five seconds, once per viewer and up to fifteen seconds per round.",
   krillion: "Submit one answer with !answer YOUR ANSWER. Scores reveal when the timer ends.",
   wordle: "Type !join, then !guess WORD. Each viewer has a personal board and up to six guesses.",
 };
@@ -73,6 +73,7 @@ function renderEditor() {
   const targetCount = latestState?.targetCounts?.[selectedDifficulty];
   const remaining = latestState?.contextNextDifficulty === selectedDifficulty ? latestState?.bagRemaining : null;
   $("#context-bag-note").textContent = (targetCount ? targetCount.toLocaleString() + " nouns. " : "") + (Number.isFinite(remaining) ? remaining + " left in this bag. " : "") + "Automatic picks do not repeat until this pool is used.";
+  $("#context-model-note").textContent = "Local commonsense associations" + (latestState?.supportedWords ? " · " + latestState.supportedWords.toLocaleString() + " supported guess words" : "") + ". Rank #1 is the answer; percentages show association strength.";
   $$(".mode-settings").forEach((section) => section.classList.toggle("hidden", section.dataset.mode !== selectedGame));
   for (const mode of Object.keys(durations)) {
     $$("#" + mode + "-duration button").forEach((button) => {

@@ -229,3 +229,26 @@ test("restore command expires access and places a recovery budget hold", async (
   assert.equal(restored.sql.prepare("SELECT COUNT(*) total FROM sessions").get()?.total, 0);
   assert.equal(restored.quota("101").available, false); restored.close();
 });
+
+test("changing the semantic model redraws legacy rounds without a loss or lost earned points", async (t) => {
+  const { semanticModel } = await import("../src/embeddings.ts");
+  const { db, cleanup } = fixture(t), rooms = new Rooms(db, options); cleanup.push(() => rooms.dispose());
+  const room = rooms.get("101"); room.game.startContext("tiger");
+  room.game.state.contextStreak = 3;
+  room.game.state.contextSessionScores = [{ login: "solver", displayName: "Solver", points: 100, solves: 1, biggestLeaps: 0, pathfinders: 0, rounds: 1 }];
+  rooms.release("101");
+  const saved = db.loadSnapshot("101"); delete saved.state.contextModelId;
+  saved.state.target = "dead";
+  saved.state.contextGuesses = [{ word: "missing", by: "Viewer", login: "viewer", rank: 2, similarity: .856, at: Date.now() }];
+  db.saveSnapshot("101", saved);
+  const records = rooms.communities.summary("101").rounds;
+  const restored = rooms.get("101");
+  assert.notEqual(restored.game.state.target, "dead");
+  assert.equal(restored.game.state.contextModelId, semanticModel.id);
+  assert.equal(restored.game.state.contextGuesses.length, 0);
+  assert.equal(restored.game.state.contextStreak, 3);
+  assert.equal(restored.game.state.contextSessionScores[0]?.points, 100);
+  assert.equal(rooms.communities.summary("101").rounds, records);
+  assert.notEqual(restored.game.pausedAt, null);
+  assert.equal(db.loadSnapshot("101").state.contextModelId, semanticModel.id);
+});

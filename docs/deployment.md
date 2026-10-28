@@ -9,7 +9,8 @@ local tests.
 
 1. Push this repository to a GitHub repository. `.env`, `.data/`, databases,
    credentials and private screenshots must remain ignored. Keep the bundled
-   `src/glove-vectors.bin`, vocabulary, target list and `licenses/` in source.
+   `src/local-vectors.bin`, `src/local-vocab.json`, `src/semantic-model.json`,
+   the target list and `licenses/` in source.
    Git has been initialized locally; create the first commit before pushing:
 
    ```sh
@@ -46,7 +47,7 @@ local tests.
    `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`. Do not enable public access.
 7. Set a funded `OPENAI_API_KEY`, `OPENAI_JUDGE_MODEL=gpt-6-luna`, and
    `AI_MONTHLY_BUDGET_USD=2` (or a smaller value). Semantic Hunt always uses local
-   vectors; this key enables only capped Krillion judging. Models other than
+   commonsense vectors; this key enables only capped Krillion judging. Models other than
    the audited judge are rejected. Provider billing alerts are additional to,
    and do not replace, the application's transaction-based spending limit.
 8. Deploy. Sign in as the owner, open `/operator`, run **Validate AI judge**, and

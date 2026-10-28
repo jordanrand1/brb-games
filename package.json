@@ -9,6 +9,7 @@
     "dev": "node --experimental-sqlite --experimental-strip-types --watch src/server.ts",
     "setup:vectors": "python3 scripts/setup-vectors.py",
     "test": "node --experimental-sqlite --experimental-strip-types --test test/*.test.ts",
+    "test:setup": "python3 -m unittest discover -s test -p '*vectors_test.py'",
     "test:load": "node --experimental-sqlite --experimental-strip-types scripts/load-test.ts",
     "backup:restore": "node --experimental-sqlite --experimental-strip-types scripts/restore-backup.ts",
     "twitch:ids": "node --experimental-strip-types scripts/twitch-ids.ts"

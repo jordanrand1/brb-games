@@ -30,6 +30,7 @@ export class Rooms {
     const saved = this.database.loadSnapshot(id);
     if (saved) game.restore(saved);
     else game.pause();
+    if (saved) this.database.saveSnapshot(id, game.checkpoint());
     const room: Room = { id, game, clients: new Set(), connection: null, idleSince: Date.now(), cooldowns: new Map(), broadcastTimer: null, storageError: false, rateWindow: Date.now(), messages: 0 };
     this.rooms.set(id, room);
     game.onChange = () => {

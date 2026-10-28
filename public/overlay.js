@@ -82,7 +82,11 @@ function render(state) {
       const exact = finished && entry.word === state.target;
       const hasScore = exact || Number.isFinite(entry.similarity);
       const percentage = exact ? 100 : Math.round(Math.max(0, Math.min(1, entry.similarity || 0)) * 100);
-      const heat = exact ? "solved" : percentage >= 75 ? "hot" : percentage >= 55 ? "warm" : percentage >= 30 ? "cool" : "cold";
+      // Local rank is the comparable progress signal. Different embedding
+      // models have different cosine ranges; a top-100 guess should look warm.
+      const heat = exact ? "solved" : state.semanticMode !== "ai"
+        ? entry.rank <= 10 ? "hot" : entry.rank <= 250 ? "warm" : entry.rank <= 1500 ? "cool" : "cold"
+        : percentage >= 75 ? "hot" : percentage >= 55 ? "warm" : percentage >= 30 ? "cool" : "cold";
       const heatLabel = exact ? "FOUND IT" : percentage >= 75 ? "SO CLOSE" : percentage >= 55 ? "WARMING UP" : percentage >= 30 ? "GETTING CLOSER" : "KEEP HUNTING";
       const rankLabel = state.semanticMode === "ai" ? heatLabel : "RANK #" + entry.rank;
       const classes = "hunt-guess heat-" + heat + (index === 0 ? " leader" : "") + (entry.at > previousLatest ? " fresh" : "");

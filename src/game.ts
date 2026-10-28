@@ -1,4 +1,4 @@
-import { contextWordPool, contextDifficultyPools, targetDifficulty, getWordRank, getWordSimilarity, isSupportedWord, lexicon, normalizeWord, wordleAnswers, wordleWords, type ContextDifficulty } from "./embeddings.ts";
+import { contextWordPool, contextDifficultyPools, targetDifficulty, getWordRank, getWordSimilarity, isSupportedWord, lexicon, normalizeWord, wordleAnswers, wordleWords, semanticModel, type ContextDifficulty } from "./embeddings.ts";
 import { randomUUID } from "node:crypto";
 import { CommunityStore, addAward, type ContributionAward, type ContributorScore } from "./community-store.ts";
 
@@ -32,6 +32,7 @@ export type GameState = {
   contextLevel: number;
   contextLevelProgress: number;
   contextRoundId: string | null;
+  contextModelId: string;
   contextDifficulty: ContextDifficulty;
   contextNextDifficulty: ContextDifficulty;
   contextClutchEnabled: boolean;
@@ -64,7 +65,7 @@ function freshState(): GameState {
     target: null, winner: null, message: "Pick a game to bring chat together.", contextGuesses: [], players: {},
     krillionPrompt: null, krillionAnswers: [], krillionJudged: false,
     contextStreak: 0, contextLevel: 1, contextLevelProgress: 0,
-    contextRoundId: null, contextDifficulty: "normal", contextNextDifficulty: "normal",
+    contextRoundId: null, contextModelId: semanticModel.id, contextDifficulty: "normal", contextNextDifficulty: "normal",
     contextClutchEnabled: true, contextClutchSeconds: 0, contextClutchUsers: [], contextClutchEvent: null,
     contextAwards: [], contextSessionScores: [],
   };
@@ -115,6 +116,14 @@ export class GameService {
     if (!saved?.state || !["idle", "context", "wordle", "krillion"].includes(saved.state.kind)) throw new Error("Invalid saved game.");
     this.state = { ...freshState(), ...saved.state };
     this.pausedAt = saved.pausedAt ?? saved.savedAt;
+    if (this.state.kind === "context" && saved.state.contextModelId !== semanticModel.id) {
+      // Stored ranks from another vocabulary/model cannot be mixed with new
+      // scores. Preserve earned records, streak and session points; redraw
+      // without recording a loss, and wait for a browser/source to reconnect.
+      this.startNextContextRound();
+      this.state.message = "Word associations were upgraded. A fresh word is ready; your earned points and streak are kept.";
+      this.pausedAt = Date.now();
+    }
     if (this.state.phase === "judging") {
       this.state.phase = "round-complete";
       this.state.message = "Judging was interrupted. The request may have been billed; it will not be repeated automatically.";
@@ -266,7 +275,8 @@ export class GameService {
     const login = cleanLogin(loginInput);
     const displayName = displayNameInput?.trim() || login;
     const word = normalizeWord(wordInput);
-    if (!login || !word || wordInput.trim().split(/\s+/).length !== 1) return "Send a single word.";
+    const wordCount = wordInput.trim().split(/\s+/).length;
+    if (!login || !word || (this.state.kind === "context" ? wordCount > 3 : wordCount !== 1)) return "Send a single word or a common compound.";
 
     if (this.state.kind === "context") {
       if (!isSupportedWord(word)) return "That word is outside the demo vocabulary.";
@@ -395,7 +405,7 @@ export class GameService {
       krillionAnswers: this.state.kind === "krillion" && this.state.phase === "round-complete" ? krillionAnswers : [],
       krillionAnswerCount: this.state.kind === "krillion" ? krillionAnswers.length : 0,
       target: this.state.phase === "finished" ? target : undefined, players,
-      semanticMode: this.semanticSimilarity ? "ai" : "local", supportedWords: lexicon.length,
+      semanticMode: this.semanticSimilarity ? "ai" : "local", semanticModel: this.semanticSimilarity ? null : semanticModel, supportedWords: lexicon.length,
       community: this.communityStore.summary(this.communityId),
       contextSessionScores: [...this.state.contextSessionScores].sort((a, b) => b.points - a.points || b.solves - a.solves || a.login.localeCompare(b.login)).slice(0, 5),
     };
@@ -510,6 +520,7 @@ export class GameService {
     this.state.target = this.communityStore.drawTarget(this.communityId, difficulty, contextDifficultyPools[difficulty]);
     this.state.contextDifficulty = difficulty;
     this.state.contextRoundId = randomUUID();
+    this.state.contextModelId = semanticModel.id;
     this.state.phase = "playing";
     this.state.winner = null;
     this.state.contextGuesses = [];

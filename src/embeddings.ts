@@ -1,7 +1,8 @@
 import { existsSync, readFileSync } from "node:fs";
+import { createHash } from "node:crypto";
 
 /**
- * Deterministic local cosine ranking. It loads a compact pretrained GloVe
+ * Deterministic local commonsense cosine ranking. It loads a compact Numberbatch
  * subset when installed and keeps a small hand-built seed vocabulary as the
  * offline fallback. This is not Contexto's private vocabulary or model.
  */
@@ -75,17 +76,24 @@ for (const [name, words] of subgroups) {
   for (const word of words) addDimension(word, `context:${name}`, 1.25);
 }
 
-// Optional compact subset of Stanford's public-domain GloVe vectors. Generate
-// it with `npm run setup:vectors`; the hand-built seed model remains available
-// when the data files have not been installed yet.
-const pretrainedVectorsPath = new URL("./glove-vectors.bin", import.meta.url);
-const pretrainedWordsPath = new URL("./glove-vocab.json", import.meta.url);
-if (existsSync(pretrainedVectorsPath) && existsSync(pretrainedWordsPath)) {
+// Numberbatch includes commonsense relationships as well as corpus embeddings.
+// A pinned manifest prevents a partial data rebuild from silently mixing rows.
+const pretrainedVectorsPath = new URL("./local-vectors.bin", import.meta.url);
+const pretrainedWordsPath = new URL("./local-vocab.json", import.meta.url);
+const modelPath = new URL("./semantic-model.json", import.meta.url);
+let model: { id: string; label: string; license?: string; vectorSha256?: string; vocabSha256?: string; targetSha256?: string; dimensions?: number; vocabularySize?: number } = { id: "seed-v1", label: "Starter word associations" };
+if ([pretrainedVectorsPath, pretrainedWordsPath, modelPath].some(existsSync)) {
+  if (![pretrainedVectorsPath, pretrainedWordsPath, modelPath].every(existsSync)) throw new Error("Local semantic data is incomplete. Run npm run setup:vectors.");
+  model = JSON.parse(readFileSync(modelPath, "utf8"));
   const pretrainedWords = JSON.parse(readFileSync(pretrainedWordsPath, "utf8")) as string[];
   const pretrainedBuffer = readFileSync(pretrainedVectorsPath);
   const dimensionCount = 300;
-  if (pretrainedWords.length < 1_000 || pretrainedBuffer.byteLength !== pretrainedWords.length * dimensionCount * Float32Array.BYTES_PER_ELEMENT) {
-    throw new Error("Local GloVe data is incomplete. Run npm run setup:vectors again.");
+  if (model.dimensions !== dimensionCount || model.vocabularySize !== pretrainedWords.length || pretrainedWords.length < 1_000
+    || new Set(pretrainedWords).size !== pretrainedWords.length || pretrainedWords.some((word) => !/^[a-z]{3,20}$/.test(word))
+    || pretrainedBuffer.byteLength !== pretrainedWords.length * dimensionCount * Float32Array.BYTES_PER_ELEMENT
+    || createHash("sha256").update(pretrainedBuffer).digest("hex") !== model.vectorSha256
+    || createHash("sha256").update(readFileSync(pretrainedWordsPath)).digest("hex") !== model.vocabSha256) {
+    throw new Error("Local semantic data failed verification. Run npm run setup:vectors again.");
   }
   const allPretrainedVectors = new Float32Array(pretrainedBuffer.buffer, pretrainedBuffer.byteOffset, pretrainedBuffer.byteLength / Float32Array.BYTES_PER_ELEMENT);
   vectors.clear();
@@ -93,9 +101,10 @@ if (existsSync(pretrainedVectorsPath) && existsSync(pretrainedWordsPath)) {
     if (/^[a-z]{3,20}$/.test(word)) vectors.set(word, allPretrainedVectors.subarray(index * dimensionCount, (index + 1) * dimensionCount));
   });
   if (vectors.size < 1_000) {
-    throw new Error("Local GloVe vocabulary is incomplete. Run npm run setup:vectors again.");
+    throw new Error("Local semantic vocabulary is incomplete. Run npm run setup:vectors again.");
   }
 }
+export const semanticModel = { id: model.id, label: model.label, license: model.license };
 
 export const lexicon = [...vectors.keys()].sort();
 export const wordVectors: ReadonlyMap<string, ArrayLike<number>> = vectors;
@@ -154,6 +163,7 @@ export function isSupportedWord(value: string): boolean {
 const seedTargets = ["ocean", "forest", "pizza", "guitar", "computer", "rainbow", "tiger", "mountain", "coffee", "planet", "garden", "school"];
 const contextTargetsPath = new URL("./context-targets.json", import.meta.url);
 export type ContextDifficulty = "easy" | "normal" | "hard";
+if (model.targetSha256 && (!existsSync(contextTargetsPath) || createHash("sha256").update(readFileSync(contextTargetsPath)).digest("hex") !== model.targetSha256)) throw new Error("The answer pools do not match the installed semantic model. Run npm run setup:vectors.");
 const targetData = existsSync(contextTargetsPath) ? JSON.parse(readFileSync(contextTargetsPath, "utf8")) : null;
 const fallbackTargets = (Array.isArray(targetData) ? targetData : seedTargets).filter((word: string) => vectors.has(word));
 export const contextDifficultyPools: Record<ContextDifficulty, string[]> = Object.fromEntries(

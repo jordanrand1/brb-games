@@ -1,38 +1,36 @@
-cat dog rabbit horse cow sheep goat pig chicken duck goose turkey eagle owl hawk
-parrot penguin whale dolphin shark octopus seal turtle frog snake lizard crocodile
-lion tiger bear wolf fox deer mouse rat squirrel bat bee butterfly spider ant crab
-lobster salmon trout tuna elephant giraffe zebra monkey gorilla kangaroo panda
-apple orange banana lemon lime grape strawberry blueberry cherry peach pear melon
-pineapple mango coconut avocado tomato potato carrot onion garlic lettuce spinach
-broccoli corn rice bread pasta pizza burger sandwich cheese butter egg soup salad
-cookie cake chocolate honey sugar salt pepper coffee tea milk juice water cereal
-sausage bacon yogurt cream ice toast flour bean pea nut peanut almond mushroom
-house home apartment room kitchen bedroom bathroom garden roof door window chair
-table desk sofa bed lamp shelf mirror clock key lock carpet blanket pillow towel
-cup plate bowl fork spoon knife pan pot oven fridge bottle basket glass candle
-vase bucket curtain drawer closet cabinet toilet sink shower bathtub ceiling floor
-stairs wall garage fence gate chimney fireplace cushion mattress couch bench
-tree forest flower grass leaf root seed mountain hill valley river lake ocean sea
-beach island desert cave rock stone sand soil field meadow jungle volcano waterfall
-pond stream coast cliff rainbow cloud rain snow wind storm thunder lightning fog
-ice fire smoke sun moon star sky earth planet comet galaxy wave shell feather nest
-car truck bus train bicycle motorcycle airplane helicopter boat ship taxi subway
-scooter rocket wheel engine tire road bridge tunnel tractor ambulance van sail
-guitar piano drum violin trumpet flute bell microphone speaker music radio record
-computer phone screen keyboard camera robot television laptop tablet printer mouse
-monitor cable battery charger headphones watch calculator flashlight remote antenna
-shirt coat jacket dress skirt pants jeans shoe boot sock hat scarf glove belt
-uniform suit sweater pocket button zipper helmet crown necklace ring bracelet
-city town village country school hospital office store market restaurant hotel
-library church museum park farm airport station stadium castle palace tower cabin
-tent classroom playground theater cinema zoo bakery factory shop beach harbor
-head face eye ear nose mouth tooth tongue neck shoulder arm hand finger chest heart
+cat dog rabbit horse cow sheep goat pig chicken duck goose turkey eagle owl
+hawk parrot penguin whale dolphin shark octopus seal turtle frog snake lizard crocodile lion
+tiger bear wolf fox deer mouse rat squirrel bat bee butterfly spider ant crab
+lobster salmon trout tuna elephant giraffe zebra monkey gorilla kangaroo panda apple orange banana
+lemon lime grape strawberry blueberry cherry peach pear melon pineapple mango coconut avocado tomato
+potato carrot onion garlic lettuce spinach broccoli corn rice bread pasta pizza burger sandwich
+cheese butter egg soup salad cookie cake chocolate honey sugar salt pepper coffee tea
+milk juice water cereal sausage bacon yogurt cream ice toast flour bean pea nut
+peanut almond mushroom house home apartment room kitchen bedroom bathroom garden roof door window
+chair table desk sofa bed lamp shelf mirror clock key lock carpet blanket pillow
+towel cup plate bowl fork spoon knife pan pot oven fridge bottle basket glass
+candle vase bucket curtain drawer closet cabinet toilet sink shower bathtub ceiling floor stairs
+wall garage fence gate chimney fireplace cushion mattress couch bench tree forest flower grass
+leaf root seed mountain hill valley river lake ocean sea beach island desert cave
+rock stone sand soil field meadow jungle volcano waterfall pond stream coast cliff rainbow
+cloud rain snow wind storm thunder lightning fog ice fire smoke sun moon star
+sky earth planet comet galaxy wave shell feather nest car truck bus train bicycle
+motorcycle airplane helicopter boat ship taxi subway scooter rocket wheel engine tire road bridge
+tunnel tractor ambulance van sail guitar piano drum violin trumpet flute bell microphone speaker
+music radio record computer phone screen keyboard camera robot television laptop tablet printer mouse
+monitor cable battery charger headphones watch calculator flashlight remote antenna shirt coat jacket dress
+skirt pants jeans shoe boot sock hat scarf glove belt uniform suit sweater pocket
+button zipper helmet crown necklace ring bracelet city town village country school hospital office
+store market restaurant hotel library church museum park farm airport station stadium castle palace
+tower cabin tent classroom playground theater cinema zoo bakery factory shop beach harbor head
+face eye ear nose mouth tooth tongue neck shoulder arm hand finger chest heart
 stomach back leg knee foot skin hair brain bone blood elbow thumb wrist ankle
 ball balloon kite toy doll puzzle book paper pencil pen brush paint crayon chalk
-notebook envelope letter stamp coin money wallet purse bag suitcase backpack box
-package parcel gift ribbon rope string chain hammer nail screw ladder shovel tool
-scissors comb soap toothbrush umbrella map flag compass trophy medal diamond pearl
-gold silver copper iron metal wood plastic rubber leather cotton wool silk brick
-football basketball baseball tennis golf hockey skateboard ski snowman snowflake
-snowball rainbow sandwich pancake waffle noodle popcorn donut cupcake candy gum
-trumpet pumpkin cucumber cabbage bean celery pear peach apricot plum broccoli
+notebook envelope letter stamp coin money wallet purse bag suitcase backpack box package parcel
+gift ribbon rope string chain hammer nail screw ladder shovel tool scissors comb soap
+toothbrush umbrella map flag compass trophy medal diamond pearl gold silver copper iron metal
+wood plastic rubber leather cotton wool silk brick football basketball baseball tennis golf hockey
+skateboard ski snowman snowflake snowball rainbow sandwich pancake waffle noodle popcorn donut cupcake candy
+gum trumpet pumpkin cucumber cabbage bean celery pear peach apricot plum broccoli pail sandcastle
+seashell beachball rose tulip sunflower daisy orchid daffodil lilac cactus fern moss petal pebble
+acorn pinecone

@@ -7,3 +7,5 @@ node_modules/
 *.sqlite
 *.sqlite-*
 *.sqlite.gz.enc
+__pycache__/
+*.py[cod]

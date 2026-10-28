@@ -6,7 +6,7 @@ configure a game, and copy a personal transparent OBS Browser Source URL.
 
 The hosted beta supports up to ten invited Twitch channels, each with independent
 controls, games, connections, records, settings and OBS URLs. One Node server
-and SQLite keep the deployment small; Semantic Hunt uses bundled GloVe vectors
+and SQLite keep the deployment small; Semantic Hunt uses bundled commonsense word vectors
 without per-guess API fees. Krillion has a durable $2 site-wide monthly ceiling,
 ten rounds per channel per UTC day, and an operator validation gate.
 
@@ -57,13 +57,15 @@ Broadcaster/moderator chat controls: `!game context`, `!game wordle`,
 come from authenticated Twitch EventSub events and are checked server-side.
 
 Semantic Hunt **always** uses local vectors, even with `OPENAI_API_KEY` configured.
-The installed vocabulary contains 12,000 guess words and 2,346 target nouns:
-320 Easy, 1,013 Standard and 1,013 Hard. Each difficulty has a persistent shuffled
+The installed vocabulary contains 30,000 guess words and 2,320 target nouns:
+481 Easy, 919 Standard and 920 Hard. Each difficulty has a persistent shuffled
 bag with no automatic repeats until exhausted. Deliberately choosing a custom
-secret may repeat. Run `npm run setup:vectors` if assets are missing; hosted
-images require the bundled assets and do not download at startup. WordNet's
-notice is in [licenses/WORDNET.txt](licenses/WORDNET.txt); the GloVe vector source
-uses the Open Data Commons PDDL.
+secret may repeat. Run `npm run setup:vectors` if assets are missing (one-time download of about
+325 MB plus vocabulary and WordNet data). Hosted images require the bundled
+assets and do not download at startup. Commonsense scoring uses ConceptNet Numberbatch 19.08. Its selected vector data
+is distributed under CC BY-SA 4.0 with attribution in
+[licenses/NUMBERBATCH.txt](licenses/NUMBERBATCH.txt). WordNet's notice is in
+[licenses/WORDNET.txt](licenses/WORDNET.txt).
 
 ## Host and operate
 
@@ -98,3 +100,6 @@ Publish the repository and run instructions, project description, a public
 YouTube demo of up to three minutes, and the main Codex build session ID.
 Future ideas, including cross-community Krillion answer depth, stay in
 [BACKLOG.md](BACKLOG.md).
+
+Semantic ranking, target filtering, and model upgrades are explained in
+[docs/semantic-ranking.md](docs/semantic-ranking.md).
