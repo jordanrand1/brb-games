@@ -73,7 +73,9 @@ function renderEditor() {
   $("#context-difficulty").value = selectedDifficulty;
   $("#context-clutch").checked = clutchEnabled;
   $("#context-hints").checked = hintsEnabled;
-  $("#context-hint-timing").value = hintTiming;
+  const hintTimingSelect = $("#context-hint-timing");
+  // Preserve the native menu while live updates redraw the dashboard.
+  if (hintTimingSelect.value !== hintTiming) hintTimingSelect.value = hintTiming;
   const targetCount = latestState?.targetCounts?.[selectedDifficulty];
   const remaining = latestState?.contextNextDifficulty === selectedDifficulty ? latestState?.bagRemaining : null;
   $("#context-bag-note").textContent = (targetCount ? targetCount.toLocaleString() + " nouns. " : "") + (Number.isFinite(remaining) ? remaining + " left in this bag. " : "") + "Automatic picks do not repeat until this pool is used.";
@@ -93,7 +95,12 @@ function renderEditor() {
   const nextKrillion = selectedGame === "krillion" && latestState?.kind === "krillion" && latestState.phase === "round-complete";
   $("#game-submit").textContent = busy ? "Saving…" : editing ? selectedGame === "context" ? "Apply settings" : "Apply timer" : nextKrillion ? "Start next round →" : "Start " + gameNames[selectedGame] + " →";
   $("#game-submit").disabled = busy || !controlsAllowed || selectedGame === "krillion" && !editing && !quota?.available;
-  $("#context-hint-timing").disabled = busy || !controlsAllowed || !hintsEnabled;
+  // Like the other draft fields, timing can be chosen before signing in or
+  // enabling hints. Authorization remains on Apply and on the server.
+  if (hintTimingSelect.disabled !== busy) hintTimingSelect.disabled = busy;
+  $("#context-hint-timing-note").textContent = !hintsEnabled
+    ? "Turn on Category hint to show it during the game."
+    : !controlsAllowed ? "Connect Twitch to apply these settings." : "Save your timing choice with Apply settings or Start game.";
   $("#krillion-quota").textContent = quota ? quota.available ? quota.dailyRemaining + " judged rounds left today · $" + Number(quota.monthlyRemainingUsd).toFixed(2) + " shared AI budget left this month." : quota.reason : "Connect Twitch to see your Krillion allowance.";
   $("#editor-note").textContent = editing
     ? selectedGame === "context" ? "Timer, hint and clutch changes apply now. Difficulty changes apply to the next word. Answers and progress are kept." : "Timer changes keep this round’s answers and progress. Time is measured from when the round began."
