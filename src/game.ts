@@ -1,11 +1,12 @@
 import { contextWordPool, contextDifficultyPools, targetDifficulty, getWordRank, getWordSimilarity, isSupportedWord, lexicon, normalizeWord, wordleAnswers, wordleWords, semanticModel, contextPoolId, getContextCategory, type ContextDifficulty } from "./embeddings.ts";
 import { randomUUID } from "node:crypto";
 import { CommunityStore, addAward, type ContributionAward, type ContributorScore } from "./community-store.ts";
+import { huntThemes, themeWords, themeLabel, VOTE_MS, MARATHON_BONUS_MS, type HuntMode, type ThemeVote, type HuntNotice } from "./word-hunt.ts";
 
 export type GameKind = "idle" | "context" | "wordle" | "krillion";
 export type GuessEntry = { word: string; by: string; login?: string; rank: number; similarity?: number; at: number; improvement?: number; newBest?: boolean };
 export type ContextHintTiming = "start" | "middle" | "end";
-type ContextOptions = { difficulty?: ContextDifficulty; clutchEnabled?: boolean; hintsEnabled?: boolean; hintTiming?: ContextHintTiming };
+type ContextOptions = { difficulty?: ContextDifficulty; clutchEnabled?: boolean; hintsEnabled?: boolean; hintTiming?: ContextHintTiming; huntMode?: HuntMode; themeVoting?: boolean; chatEnabled?: boolean };
 const hintFractions = { start: 0, middle: .5, end: .75 };
 export type WordleAttempt = { word: string; colors: Array<"correct" | "present" | "absent">; at: number };
 export type WordlePlayer = { login: string; displayName: string; joinedAt: number; alive: boolean; solved: boolean; attempts: WordleAttempt[] };
@@ -47,6 +48,16 @@ export type GameState = {
   contextClutchEvent: { by: string; seconds: number; at: number } | null;
   contextAwards: ContributionAward[];
   contextSessionScores: ContributorScore[];
+  contextMode: HuntMode;
+  contextTheme: string;
+  contextThemeVoting: boolean;
+  contextVote: ThemeVote | null;
+  contextChatEnabled: boolean;
+  contextNotices: HuntNotice[];
+  contextHintWindowMs: number;
+  contextMarathonRemainingMs: number;
+  contextMarathonSolves: number;
+  contextMarathonEnded: boolean;
 };
 
 const clampDuration = (seconds: number) => ([30, 45, 60].includes(seconds) ? seconds : 45);
@@ -75,6 +86,9 @@ function freshState(): GameState {
     contextClutchEnabled: true, contextHintsEnabled: true, contextHintTiming: "middle", contextHintRevealed: false,
     contextClutchSeconds: 0, contextClutchUsers: [], contextClutchEvent: null,
     contextAwards: [], contextSessionScores: [],
+    contextMode: "rounds", contextTheme: "mystery", contextThemeVoting: false, contextVote: null,
+    contextChatEnabled: true, contextNotices: [], contextHintWindowMs: 60_000,
+    contextMarathonRemainingMs: 0, contextMarathonSolves: 0, contextMarathonEnded: false,
   };
 }
 
@@ -115,6 +129,7 @@ export class GameService {
     const delta = now - this.pausedAt;
     if (this.state.startedAt !== null) this.state.startedAt += delta;
     if (this.state.endsAt !== null) this.state.endsAt += delta;
+    if (this.state.contextVote) this.state.contextVote.endsAt += delta;
     this.pausedAt = null;
     this.emit();
   }
@@ -131,6 +146,7 @@ export class GameService {
       // Stored ranks from another vocabulary/model cannot be mixed with new
       // scores. Preserve earned records, streak and session points; redraw
       // without recording a loss, and wait for a browser/source to reconnect.
+      if (this.state.contextMode === "marathon" && this.state.phase === "playing") this.state.contextMarathonRemainingMs = Math.max(0, (this.state.endsAt || this.pausedAt) - this.pausedAt);
       this.startNextContextRound();
       this.state.message = modelChanged
         ? "Word associations were upgraded. A fresh word is ready; your earned points and streak are kept."
@@ -171,6 +187,7 @@ export class GameService {
   startContext(secret?: string, durationSeconds = 60, options: ContextOptions = {}): void {
     const hintTiming = options.hintTiming ?? "middle";
     if (!Object.hasOwn(hintFractions, hintTiming)) throw new Error("Choose Start, Middle, or End for hint timing.");
+    if (options.huntMode && !["rounds", "marathon"].includes(options.huntMode)) throw new Error("Choose Rounds or Marathon.");
     this.pausedAt = null;
     const difficulty = options.difficulty || "easy";
     if (!["easy", "normal", "hard"].includes(difficulty)) throw new Error("Choose Easy, Standard, or Expert difficulty.");
@@ -179,6 +196,7 @@ export class GameService {
     const actualDifficulty = manualWord ? targetDifficulty(manualWord) : difficulty;
     const target = this.communityStore.drawTarget(this.communityId, actualDifficulty, contextDifficultyPools[actualDifficulty], manualWord);
     const duration = clampContextDuration(durationSeconds);
+    const mode = options.huntMode || "rounds";
     this.state = {
       ...freshState(), kind: "context", phase: "playing", round: 1, startedAt: Date.now(), target,
       durationSeconds: duration, endsAt: Date.now() + duration * 1000,
@@ -186,8 +204,12 @@ export class GameService {
       contextClutchEnabled: options.clutchEnabled !== false,
       contextHintsEnabled: options.hintsEnabled !== false,
       contextHintTiming: hintTiming, contextHintRevealed: hintTiming === "start" && options.hintsEnabled !== false,
+      contextMode: mode, contextThemeVoting: options.themeVoting === true, contextChatEnabled: options.chatEnabled !== false,
+      contextHintWindowMs: mode === "marathon" ? Math.min(60_000, duration * 1000) : duration * 1000,
+      contextMarathonRemainingMs: mode === "marathon" ? duration * 1000 : 0,
       message: `Round 1: guess the word within ${duration} seconds.`,
     };
+    this.roundNotice();
     this.emit();
   }
 
@@ -256,14 +278,18 @@ export class GameService {
     if (!choices.includes(durationSeconds)) throw new Error("Choose one of the available round durations.");
     if (options.difficulty && !["easy", "normal", "hard"].includes(options.difficulty)) throw new Error("Choose Easy, Standard, or Expert difficulty.");
     if (options.hintTiming !== undefined && !Object.hasOwn(hintFractions, options.hintTiming)) throw new Error("Choose Start, Middle, or End for hint timing.");
+    if (state.kind === "context" && state.contextMode === "marathon" && durationSeconds !== state.durationSeconds) throw new Error("Change the starting clock when starting a new Marathon.");
     state.durationSeconds = durationSeconds;
     if (state.kind === "context") {
       if (options.difficulty) state.contextNextDifficulty = options.difficulty;
       if (typeof options.clutchEnabled === "boolean") state.contextClutchEnabled = options.clutchEnabled;
       if (typeof options.hintsEnabled === "boolean") state.contextHintsEnabled = options.hintsEnabled;
       if (options.hintTiming !== undefined) state.contextHintTiming = options.hintTiming;
+      if (typeof options.themeVoting === "boolean") state.contextThemeVoting = options.themeVoting;
+      if (typeof options.chatEnabled === "boolean") state.contextChatEnabled = options.chatEnabled;
+      if (!state.contextThemeVoting) state.contextVote = null;
     }
-    if (state.phase === "playing" && state.startedAt) state.endsAt = state.startedAt + durationSeconds * 1000 + (state.kind === "context" ? state.contextClutchSeconds * 1000 : 0);
+    if (state.phase === "playing" && state.startedAt && !(state.kind === "context" && state.contextMode === "marathon")) state.endsAt = state.startedAt + durationSeconds * 1000 + (state.kind === "context" ? state.contextClutchSeconds * 1000 : 0);
     this.emit();
     this.advanceIfDue();
   }
@@ -384,6 +410,7 @@ export class GameService {
         && hintAt !== null && Date.now() >= hintAt
         && this.state.endsAt !== null && Date.now() < this.state.endsAt) {
         this.state.contextHintRevealed = true;
+        this.notice("hint", "Hint available: " + getContextCategory(this.state.target!) + ". Keep guessing!");
         this.emit();
       }
       if (!this.state.endsAt || Date.now() < this.state.endsAt) return;
@@ -419,7 +446,7 @@ export class GameService {
   }
 
   publicState(): Record<string, unknown> {
-    const { target, krillionAnswers, contextClutchUsers, ...publicState } = this.state;
+    const { target, krillionAnswers, contextClutchUsers, contextNotices, contextVote, ...publicState } = this.state;
     const players = Object.values(this.state.players).map((player) => ({
       login: player.login, displayName: player.displayName, alive: player.alive, solved: player.solved,
       attempts: player.attempts,
@@ -430,6 +457,8 @@ export class GameService {
       contextGuessCount: this.state.contextGuesses.length,
       contextPlayerCount: new Set(this.state.contextGuesses.map((guess) => guess.login)).size,
       contextGuesses: this.state.contextGuesses.slice(0, 20),
+      contextVote: contextVote ? { endsAt: contextVote.endsAt, options: contextVote.options, totalVotes: Object.keys(contextVote.ballots).length } : null,
+      contextMarathonClockMs: this.state.contextMode === "marathon" && this.state.phase === "playing" ? Math.max(0, (this.state.endsAt || 0) - (this.pausedAt ?? Date.now())) : this.state.contextMarathonRemainingMs,
       krillionAnswers: this.state.kind === "krillion" && this.state.phase === "round-complete" ? krillionAnswers : [],
       krillionAnswerCount: this.state.kind === "krillion" ? krillionAnswers.length : 0,
       target: this.state.phase === "finished" ? target : undefined, players,
@@ -453,7 +482,36 @@ export class GameService {
   }
 
   private contextHintDeadline(): number | null {
-    return this.state.startedAt === null ? null : this.state.startedAt + this.state.durationSeconds * 1000 * hintFractions[this.state.contextHintTiming];
+    const window = this.state.contextMode === "marathon" ? this.state.contextHintWindowMs : this.state.durationSeconds * 1000;
+    return this.state.startedAt === null ? null : this.state.startedAt + window * hintFractions[this.state.contextHintTiming];
+  }
+
+  voteForTheme(loginInput: string, choice: number): string {
+    const vote = this.state.contextVote, login = cleanLogin(loginInput);
+    if (this.pausedAt !== null || this.state.phase !== "finished" || !vote || Date.now() >= vote.endsAt) return "No theme vote is open.";
+    if (!login || !Number.isInteger(choice) || !vote.options[choice - 1]) return "Vote 1, 2 or 3.";
+    if (!Object.hasOwn(vote.ballots, login) && Object.keys(vote.ballots).length >= 2000) return "The vote has reached its player limit.";
+    const previous = Object.hasOwn(vote.ballots, login) ? vote.ballots[login] : undefined;
+    if (previous === choice - 1) return "Your vote is already counted.";
+    if (previous !== undefined) vote.options[previous]!.votes--;
+    Object.defineProperty(vote.ballots, login, { value: choice - 1, writable: true, enumerable: true, configurable: true });
+    vote.options[choice - 1]!.votes++;
+    this.emit();
+    return "Voted for " + vote.options[choice - 1]!.label;
+  }
+
+  private notice(kind: string, text: string): void {
+    if (!this.state.contextChatEnabled) return;
+    const id = this.state.contextRoundId + ":" + kind;
+    if (this.state.contextNotices.some((entry) => entry.id === id)) return;
+    this.state.contextNotices.push({ id, text: ("[Word Hunt] " + text).slice(0, 500), at: Date.now(), claimed: false });
+    this.state.contextNotices = this.state.contextNotices.slice(-12);
+  }
+
+  private roundNotice(): void {
+    const state = this.state;
+    const clock = state.contextMode === "marathon" ? `Marathon: ${Math.ceil(state.contextMarathonRemainingMs / 1000)}s on the shared clock, +15s per solve.` : `${state.durationSeconds}s to guess.`;
+    this.notice("start", `Round ${state.round} started! ${clock} Theme: ${themeLabel(state.contextTheme)}. Type a word in chat.` + (state.contextHintRevealed ? ` Hint: ${getContextCategory(state.target!)}.` : ""));
   }
 
   private finishWordle(winner: string | null): void {
@@ -481,7 +539,7 @@ export class GameService {
     else {
       state.message = this.semanticSimilarity ? `${displayName} guessed “${word}” — similarity ${Math.round(similarity * 100)}%.` : `${displayName} guessed “${word}” — rank #${rank}.`;
       const remaining = (state.endsAt || 0) - Date.now();
-      if (state.contextClutchEnabled && previousBest !== null && gain >= .05 - 1e-9 && remaining > 0 && remaining <= 10_000 && state.contextClutchSeconds < 15 && !state.contextClutchUsers.includes(login)) {
+      if (state.contextMode !== "marathon" && state.contextClutchEnabled && previousBest !== null && gain >= .05 - 1e-9 && remaining > 0 && remaining <= 10_000 && state.contextClutchSeconds < 15 && !state.contextClutchUsers.includes(login)) {
         state.contextClutchSeconds += 5;
         state.contextClutchUsers.push(login);
         state.endsAt! += 5_000;
@@ -514,20 +572,44 @@ export class GameService {
   private completeContextRound(winner: GuessEntry | null): void {
     const state = this.state;
     if (state.kind !== "context" || state.phase !== "playing") return;
+    const remaining = Math.max(0, (state.endsAt || 0) - Date.now());
+    if (state.contextMode === "marathon") {
+      if (winner) {
+        state.contextMarathonSolves++;
+        state.contextMarathonRemainingMs = Math.min(300_000, remaining + MARATHON_BONUS_MS);
+      } else {
+        state.contextMarathonRemainingMs = 0;
+        state.contextMarathonEnded = true;
+      }
+    }
     state.phase = "finished";
     state.winner = winner?.by || null;
-    state.endsAt = Date.now() + CONTEXT_REVEAL_MS;
+    state.endsAt = state.contextMarathonEnded ? null : Date.now() + (state.contextThemeVoting ? VOTE_MS : CONTEXT_REVEAL_MS);
     if (winner) {
       state.contextStreak += 1;
       state.contextLevel = Math.floor(state.contextStreak / 3) + 1;
       state.contextLevelProgress = state.contextStreak % 3;
-      state.message = `${winner.by} found “${state.target}”! Chat streak: ${state.contextStreak} · level ${state.contextLevel}. Next word in ${CONTEXT_REVEAL_MS / 1000} seconds.`;
+      state.message = `${winner.by} found “${state.target}”! Chat streak: ${state.contextStreak} · level ${state.contextLevel}. Next word in ${(state.contextThemeVoting ? VOTE_MS : CONTEXT_REVEAL_MS) / 1000} seconds.`;
     } else {
       const endedStreak = state.contextStreak;
       state.contextStreak = 0;
       state.contextLevel = 1;
       state.contextLevelProgress = 0;
-      state.message = `Time is up! The word was “${state.target}”.${endedStreak ? ` The ${endedStreak}-round streak ends here.` : ""} Next word in ${CONTEXT_REVEAL_MS / 1000} seconds.`;
+      state.message = `Time is up! The word was “${state.target}”.${endedStreak ? ` The ${endedStreak}-round streak ends here.` : ""} Next word in ${(state.contextThemeVoting ? VOTE_MS : CONTEXT_REVEAL_MS) / 1000} seconds.`;
+    }
+    if (state.contextMode === "marathon") state.message = winner
+      ? `${winner.by} found “${state.target}”! +15s · ${state.contextMarathonSolves} word${state.contextMarathonSolves === 1 ? "" : "s"} solved. The run clock pauses between words.`
+      : `Marathon over! ${state.contextMarathonSolves} word${state.contextMarathonSolves === 1 ? "" : "s"} solved. The last word was “${state.target}”. Start a new run to beat your record.`;
+    this.notice("result", winner ? `${winner.by} guessed the word: ${state.target}!${state.contextMode === "marathon" ? ` +15s; ${state.contextMarathonSolves} word${state.contextMarathonSolves === 1 ? "" : "s"} solved.` : ` Chat streak: ${state.contextStreak}.`}`
+      : state.contextMarathonEnded ? `Marathon over: ${state.contextMarathonSolves} word${state.contextMarathonSolves === 1 ? "" : "s"} solved! The last word was ${state.target}.` : `Time is up! The word was ${state.target}.`);
+    state.contextVote = null;
+    if (state.contextThemeVoting && !state.contextMarathonEnded) {
+      const words = this.communityStore.availableTargets(this.communityId, state.contextNextDifficulty, contextDifficultyPools[state.contextNextDifficulty]);
+      const available = huntThemes.filter((theme) => theme.id !== "mystery" && themeWords(words, theme.id).length >= 1);
+      const themes: typeof available = [];
+      while (available.length && themes.length < 2) themes.push(available.splice(Math.floor(Math.random() * available.length), 1)[0]!);
+      state.contextVote = { endsAt: state.endsAt!, options: [...themes, huntThemes[0]!].map((theme) => ({ id: theme.id, label: theme.label, votes: 0 })), ballots: {} };
+      this.notice("vote", `Vote for the next theme! ${state.contextVote.options.map((theme, index) => `${index + 1}: ${theme.label}`).join(" | ")}. Type a number (or !vote NUMBER) within 10s.`);
     }
     state.contextAwards = this.contributionAwards(winner);
     const participants = [...new Map(state.contextGuesses.filter((entry) => entry.login).map((entry) => [entry.login!, { login: entry.login!, displayName: entry.by }])).values()];
@@ -543,15 +625,29 @@ export class GameService {
     this.communityStore.recordRound(this.communityId, {
       id: state.contextRoundId!, word: state.target!, difficulty: state.contextDifficulty, won: Boolean(winner), streak: state.contextStreak,
       solvedMs: winner ? Math.max(0, winner.at - state.startedAt!) : null, completedAt: Date.now(), awards: state.contextAwards, participants,
+      mode: state.contextMode, theme: themeLabel(state.contextTheme), marathonSolves: state.contextMarathonSolves,
+      guessCount: state.contextGuesses.length,
+      closestGuesses: state.contextGuesses.filter((guess) => guess.word !== state.target).slice(0, 5).map(({ word, by, rank, similarity }) => ({ word, by, rank, similarity })),
     }, this.checkpoint());
     this.emit();
   }
 
   private startNextContextRound(): void {
-    if (this.state.kind !== "context") return;
+    if (this.state.kind !== "context" || this.state.contextMarathonEnded) return;
     const difficulty = this.state.contextNextDifficulty;
+    const vote = this.state.contextVote;
+    let theme = "mystery";
+    if (vote && Object.keys(vote.ballots).length) {
+      const best = Math.max(...vote.options.map((entry) => entry.votes));
+      theme = choose(vote.options.filter((entry) => entry.votes === best)).id;
+    }
+    const words = contextDifficultyPools[difficulty];
+    let eligible = themeWords(this.communityStore.availableTargets(this.communityId, difficulty, words), theme);
+    if (!eligible.length) { theme = "mystery"; eligible = words; }
     this.state.round += 1;
-    this.state.target = this.communityStore.drawTarget(this.communityId, difficulty, contextDifficultyPools[difficulty]);
+    this.state.target = this.communityStore.drawTarget(this.communityId, difficulty, words, undefined, eligible);
+    this.state.contextTheme = theme;
+    this.state.contextVote = null;
     this.state.contextDifficulty = difficulty;
     this.state.contextRoundId = randomUUID();
     this.state.contextModelId = semanticModel.id;
@@ -565,8 +661,12 @@ export class GameService {
     this.state.contextClutchEvent = null;
     this.state.contextHintRevealed = this.state.contextHintsEnabled && this.state.contextHintTiming === "start";
     this.state.startedAt = Date.now();
-    this.state.endsAt = Date.now() + this.state.durationSeconds * 1000;
+    const clockMs = this.state.contextMode === "marathon" ? this.state.contextMarathonRemainingMs : this.state.durationSeconds * 1000;
+    this.state.contextHintWindowMs = Math.min(60_000, clockMs);
+    this.state.endsAt = Date.now() + clockMs;
     this.state.message = `Round ${this.state.round}: ${this.state.durationSeconds} seconds. Chat level ${this.state.contextLevel} · ${this.state.contextLevelProgress}/3 wins to level up.`;
+    if (this.state.contextMode === "marathon") this.state.message = `Round ${this.state.round}: ${Math.ceil(clockMs / 1000)} seconds on the run clock. ${this.state.contextMarathonSolves} word${this.state.contextMarathonSolves === 1 ? "" : "s"} solved.`;
+    this.roundNotice();
     this.emit();
   }
 

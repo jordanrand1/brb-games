@@ -6,7 +6,7 @@ import { TwitchConnection } from "./twitch-connection.ts";
 import { canControlChannelMessage } from "./twitch-chat.ts";
 
 export type StreamClient = { response: any; view: "public" | "control"; last?: Record<string, unknown>; sessionId?: string; heartbeat?: ReturnType<typeof setInterval> };
-export type Room = { id: string; game: GameService; clients: Set<StreamClient>; connection: TwitchConnection | null; idleSince: number | null; cooldowns: Map<string, number>; broadcastTimer: ReturnType<typeof setTimeout> | null; storageError: boolean; rateWindow: number; messages: number };
+export type Room = { id: string; game: GameService; clients: Set<StreamClient>; connection: TwitchConnection | null; idleSince: number | null; cooldowns: Map<string, number>; broadcastTimer: ReturnType<typeof setTimeout> | null; storageError: boolean; rateWindow: number; messages: number; posting: boolean; chatError: string | null };
 type RoomOptions = { clientId: string; clientSecret: string; aiKey: string; maxActive?: number; idleMs?: number; allowed: (id: string) => boolean; model?: string };
 
 export class Rooms {
@@ -31,10 +31,11 @@ export class Rooms {
     if (saved) game.restore(saved);
     else game.pause();
     if (saved) this.database.saveSnapshot(id, game.checkpoint());
-    const room: Room = { id, game, clients: new Set(), connection: null, idleSince: Date.now(), cooldowns: new Map(), broadcastTimer: null, storageError: false, rateWindow: Date.now(), messages: 0 };
+    const room: Room = { id, game, clients: new Set(), connection: null, idleSince: Date.now(), cooldowns: new Map(), broadcastTimer: null, storageError: false, rateWindow: Date.now(), messages: 0, posting: false, chatError: null };
     this.rooms.set(id, room);
     game.onChange = () => {
       this.persist(room);
+      void this.postNotices(room);
       if (!room.broadcastTimer) room.broadcastTimer = setTimeout(() => { room.broadcastTimer = null; this.broadcast(room); }, 100);
     };
     if (this.options.aiKey) {
@@ -45,7 +46,7 @@ export class Rooms {
       clientId: this.options.clientId, clientSecret: this.options.clientSecret,
       save: (credentials) => this.database.saveCredentials(id, credentials),
       onChat: (event) => { void this.chat(room, event).catch(() => console.error("[chat] Could not process a game message for", id)); },
-      onStatus: () => { for (const client of room.clients) this.write(client, "connection", {}); },
+      onStatus: () => { for (const client of room.clients) this.write(client, "connection", {}); void this.postNotices(room); },
       onRevoked: () => {
         this.database.clearCredentials(id); game.pause();
         for (const client of [...room.clients]) client.response.end();
@@ -61,6 +62,7 @@ export class Rooms {
     if (view === "control") {
       state.krillionQuota = this.quota(room.id);
       state.storageWarning = room.storageError ? "Game progress could not be saved. Gameplay is paused; contact the operator." : null;
+      state.chatAnnouncementWarning = room.chatError || (room.game.state.contextChatEnabled && room.connection && !room.connection.canPost ? "Reconnect Twitch once to allow game announcements in chat." : null);
     }
     return state;
   }
@@ -81,6 +83,29 @@ export class Rooms {
       if (room.game.pausedAt === null) room.game.pausedAt = Date.now();
       console.error("[storage] Could not checkpoint channel", room.id);
     }
+  }
+
+  private async postNotices(room: Room): Promise<void> {
+    if (room.posting || !room.connection?.canPost || room.connection.status !== "Connected" || room.game.pausedAt !== null || !room.game.state.contextChatEnabled || room.storageError) return;
+    room.posting = true;
+    try {
+      while (this.rooms.get(room.id) === room && room.game.pausedAt === null && room.game.state.contextChatEnabled) {
+        const notice = room.game.state.contextNotices.find((entry) => {
+          if (entry.claimed || Date.now() - entry.at > 20_000) return false;
+          if (entry.id.endsWith(":result")) return true;
+          if (!entry.id.startsWith(room.game.state.contextRoundId + ":")) return false;
+          return entry.id.endsWith(":vote") ? !!room.game.state.contextVote && Date.now() < room.game.state.contextVote.endsAt : room.game.state.phase === "playing";
+        });
+        if (!notice) break;
+        // Claim durably before sending. Unknown network outcomes are never
+        // retried after a refresh/restart; game events must not flood chat.
+        notice.claimed = true;
+        this.persist(room);
+        if (room.storageError) return;
+        try { await room.connection.sendChat(notice.text); room.chatError = null; }
+        catch (error) { room.chatError = error instanceof Error ? error.message : "Chat announcement could not be delivered."; }
+      }
+    } finally { room.posting = false; this.broadcast(room); }
   }
 
   private write(client: StreamClient, event: string, data: unknown): void {
@@ -147,14 +172,16 @@ export class Rooms {
     if (event.broadcaster_user_id !== room.id || room.game.pausedAt !== null || room.storageError) return;
     const login = String(event.chatter_user_login || "").slice(0, 25), name = String(event.chatter_user_name || login).slice(0, 32);
     const text = String(event.message?.text || "").trim().slice(0, 500);
+    if (event.chatter_user_id === room.id && text.startsWith("[Word Hunt]")) return;
     if (Date.now() - room.rateWindow >= 1000) { room.rateWindow = Date.now(); room.messages = 0; }
     if (++room.messages > 50 && !canControlChannelMessage(event)) return;
     if (!login || !text || Date.now() - (room.cooldowns.get(login) || 0) < 750) return;
     if (room.cooldowns.size >= 2000 && !room.cooldowns.has(login)) return;
     room.cooldowns.set(login, Date.now());
-    const match = text.match(/^!(guess|join|answer|game|stop)\b(?:\s+(.*))?$/i);
+    const match = text.match(/^!(guess|join|answer|game|stop|vote)\b(?:\s+(.*))?$/i);
     const action = match?.[1]?.toLowerCase(), argument = match?.[2] || "";
-    if ((!match && room.game.state.kind === "context") || action === "guess") await room.game.chatGuessAsync(login, name, match ? argument : text);
+    if (action === "vote" || (!match && room.game.state.contextVote && /^[123]$/.test(text))) room.game.voteForTheme(login, Number(match ? argument : text));
+    else if ((!match && room.game.state.kind === "context") || action === "guess") await room.game.chatGuessAsync(login, name, match ? argument : text);
     else if (action === "join") room.game.join(login, name);
     else if (action === "answer") room.game.submitKrillionAnswer(login, name, argument);
     else if ((action === "game" || action === "stop") && canControlChannelMessage(event)) {
@@ -162,6 +189,7 @@ export class Rooms {
       const durations = settings.durations as Record<string, number> || {};
       if (action === "stop" || argument.toLowerCase() === "stop") room.game.stop();
       else if (["context", "hunt", "wordhunt", "word hunt"].includes(argument.toLowerCase())) room.game.startContext(undefined, durations.context || 60, settings);
+      else if (argument.toLowerCase() === "marathon") room.game.startContext(undefined, durations.context || 180, { ...settings, huntMode: "marathon", themeVoting: settings.themeVoting !== false });
       else if (argument.toLowerCase() === "wordle") room.game.startWordle(durations.wordle || 45);
       else if (/^krillion(?:\s|$)/i.test(argument)) { this.requireQuota(room.id); room.game.startKrillion(durations.krillion || 30, argument.slice(8).trim() || undefined); }
     }

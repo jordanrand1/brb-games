@@ -100,6 +100,7 @@ function config(account: Account | null): Record<string, unknown> {
   return {
     twitchConfigured: configured, twitchAuthenticated: Boolean(account), twitchConnected: room?.connection?.status === "Connected",
     signupMode, maxActiveChannels: 10,
+    chatWriteGranted: account?.credentials?.scopes?.includes("user:write:chat") === true,
     channel: account?.name || null, login: account?.login || null, aiSemanticRanking: false,
     status: capacity ? "Beta at capacity" : configured ? account ? room?.connection?.status || "Paused" : "Not connected" : "Local demo",
     message: capacity ? "All ten beta channels are active. Try playing again when another channel pauses." : configured ? account ? room?.connection?.message || "Open the browser source to resume your saved game." : publicSignups ? "Connect Twitch to play with your community, then copy your personal OBS source. Up to ten channels can play at once." : "Invite-only beta: connect an invited broadcaster account, then add your OBS source." : "Local demo. Configure Twitch when you are ready to connect chat.",
@@ -131,7 +132,7 @@ async function oauthCallback(req: any, res: any, url: URL): Promise<void> {
     redirect(res, "/?notice=invite-required"); return;
   }
   rooms.release(user.id);
-  const account = database.putAccount({ userId: user.id, login: user.login, displayName: user.display_name, accessToken: token.access_token, refreshToken: token.refresh_token, expiresAt: Date.now() + token.expires_in * 1000 });
+  const account = database.putAccount({ userId: user.id, login: user.login, displayName: user.display_name, accessToken: token.access_token, refreshToken: token.refresh_token, expiresAt: Date.now() + token.expires_in * 1000, scopes: token.scope });
   const id = database.createSession(account.id);
   res.setHeader("Set-Cookie", [cookie(id), `brb_oauth_state=; HttpOnly; SameSite=Lax; Path=/auth/callback; Max-Age=0${secure}`]);
   redirect(res, "/?connected=1");
@@ -167,7 +168,7 @@ const server = createServer(async (req, res) => {
       if (oauthStates.size >= 1000) throw new HttpError(429, "Sign-in is busy. Try again shortly.");
       const state = randomBytes(24).toString("hex"); oauthStates.set(state, Date.now() + 600_000);
       const target = new URL("https://id.twitch.tv/oauth2/authorize");
-      for (const [key, value] of Object.entries({ client_id: clientId, redirect_uri: callback, response_type: "code", scope: "user:read:chat", state })) target.searchParams.set(key, value);
+      for (const [key, value] of Object.entries({ client_id: clientId, redirect_uri: callback, response_type: "code", scope: "user:read:chat user:write:chat", state })) target.searchParams.set(key, value);
       res.setHeader("Set-Cookie", `brb_oauth_state=${state}; HttpOnly; SameSite=Lax; Path=/auth/callback; Max-Age=600${secure}`);
       redirect(res, target.toString()); return;
     }
@@ -188,6 +189,15 @@ const server = createServer(async (req, res) => {
     }
     if (req.method === "GET" && url.pathname === "/preview") { redirect(res, "/"); return; }
     if (req.method === "GET" && url.pathname === "/api/config") { rate(req, "config", 180); json(res, 200, config(accountFrom(req))); return; }
+    if (req.method === "GET" && url.pathname === "/api/history") {
+      rate(req, "history", 60);
+      const account = requireAccount(req);
+      const id = account?.id || "local-demo";
+      const history = rooms.communities.history(id, Number(url.searchParams.get("offset") || 0));
+      // Reading history at capacity must not retain another inactive room's data.
+      if (!rooms.rooms.has(id)) rooms.communities.forget(id);
+      json(res, 200, history); return;
+    }
     if (req.method === "POST" && url.pathname === "/api/overlay/rotate") {
       const account = requireAccount(req);
       if (!account) throw new HttpError(400, "Local demo sources do not need rotation.");
@@ -210,7 +220,8 @@ const server = createServer(async (req, res) => {
       const room = roomFor(req);
       if (room.storageError) throw new HttpError(503, "Game storage is unavailable. Contact the operator.");
       const value = await body(req), action = String(value.action || "");
-      const options = { difficulty: typeof value.difficulty === "string" ? value.difficulty as ContextDifficulty : undefined, clutchEnabled: typeof value.clutchEnabled === "boolean" ? value.clutchEnabled : undefined, hintsEnabled: typeof value.hintsEnabled === "boolean" ? value.hintsEnabled : undefined, hintTiming: typeof value.hintTiming === "string" ? value.hintTiming as "start" | "middle" | "end" : undefined };
+      const options = { difficulty: typeof value.difficulty === "string" ? value.difficulty as ContextDifficulty : undefined, clutchEnabled: typeof value.clutchEnabled === "boolean" ? value.clutchEnabled : undefined, hintsEnabled: typeof value.hintsEnabled === "boolean" ? value.hintsEnabled : undefined, hintTiming: typeof value.hintTiming === "string" ? value.hintTiming as "start" | "middle" | "end" : undefined,
+        huntMode: typeof value.huntMode === "string" ? value.huntMode as "rounds" | "marathon" : undefined, themeVoting: typeof value.themeVoting === "boolean" ? value.themeVoting : undefined, chatEnabled: typeof value.chatEnabled === "boolean" ? value.chatEnabled : undefined };
       try {
         if (action === "context") room.game.startContext(typeof value.secret === "string" ? value.secret : undefined, Number(value.durationSeconds || 60), options);
         else if (action === "wordle") room.game.startWordle(Number(value.durationSeconds || 45), typeof value.secret === "string" ? value.secret : undefined);
@@ -224,7 +235,8 @@ const server = createServer(async (req, res) => {
       if (account && ["context", "wordle", "krillion", "configure"].includes(action)) database.saveSettings(account.id, {
         ...account.settings, mode: room.game.state.kind, durationSeconds: room.game.state.durationSeconds,
         durations: { ...(account.settings.durations as object || {}), [room.game.state.kind]: room.game.state.durationSeconds },
-        ...(room.game.state.kind === "context" ? { difficulty: room.game.state.contextNextDifficulty, clutchEnabled: room.game.state.contextClutchEnabled, hintsEnabled: room.game.state.contextHintsEnabled, hintTiming: room.game.state.contextHintTiming } : {}),
+        ...(room.game.state.kind === "context" ? { difficulty: room.game.state.contextNextDifficulty, clutchEnabled: room.game.state.contextClutchEnabled, hintsEnabled: room.game.state.contextHintsEnabled, hintTiming: room.game.state.contextHintTiming,
+          huntMode: room.game.state.contextMode, themeVoting: room.game.state.contextThemeVoting, chatEnabled: room.game.state.contextChatEnabled } : {}),
         ...(room.game.state.kind === "krillion" ? { prompt: room.game.state.krillionPrompt } : {}),
       });
       json(res, 200, { ok: true, state: rooms.state(room, "control") }); return;

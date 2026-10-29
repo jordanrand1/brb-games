@@ -26,10 +26,19 @@ local tests.
    ($0.25/month). Set the region closest to initial streamers before creating it.
    The Blueprint disables auto-deploy; run checks before manual deploys to avoid
    interrupting streams with every commit.
+   For an existing manually created service, check its actual auto-deploy setting.
+   Add a disk under **Disks → Add disk**, size **1 GB**, mount **`/var/data`**,
+   and set `BRB_DATA_DIR=/var/data`. Setting the environment variable without a
+   disk is not durable. Adding the disk redeploys the app; starting fresh is
+   acceptable for this beta, or export existing data first if it must be kept.
 3. Set `PUBLIC_BASE_URL` to the final HTTPS `https://YOUR-SERVICE.onrender.com`
    URL, without a path. Register exactly
    `https://YOUR-SERVICE.onrender.com/auth/callback` in the Twitch developer
    console. Local and hosted callbacks can coexist in the same application.
+   Twitch sign-in requests `user:read:chat` and `user:write:chat`. Existing
+   streamers reconnect once to enable announcements posted as their account.
+   Without the write scope their games still work and the dashboard explains
+   why announcements are unavailable.
 4. Set `TWITCH_CLIENT_ID`, `TWITCH_CLIENT_SECRET`, and `OWNER_TWITCH_USER_ID` to
    your **numeric Twitch user ID**, not your login. `SIGNUP_MODE=public` is the
    default: any streamer can sign in and gets independent games and a personal

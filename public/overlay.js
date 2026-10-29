@@ -31,6 +31,15 @@ window.addEventListener("resize", fitOverlay);
 
 function updateContextClock(state) {
   const now = state.paused ? state.pausedAt : Date.now();
+  const marathon = state.contextMode === "marathon";
+  $("#marathon-banner").classList.toggle("hidden", !marathon);
+  if (marathon) {
+    const ms = state.phase === "playing" ? Math.max(0, (state.endsAt || now) - now) : state.contextMarathonClockMs || 0;
+    const seconds = Math.ceil(ms / 1000);
+    $("#marathon-run-clock").textContent = Math.floor(seconds / 60) + ":" + String(seconds % 60).padStart(2, "0");
+    $("#marathon-word-count").textContent = String(state.contextMarathonSolves || 0);
+    $("#marathon-best").textContent = String(state.community?.bestMarathonWords || 0);
+  }
   const category = $("#context-category-hint");
   const hasHint = state.phase === "playing" && state.contextHintsEnabled !== false && (state.contextHint || state.contextHintAt);
   category.classList.toggle("hidden", !hasHint);
@@ -43,8 +52,8 @@ function updateContextClock(state) {
   const remaining = state.endsAt ? Math.max(0, Math.ceil((state.endsAt - now) / 1000)) : 0;
   const reveal = state.phase === "finished";
   $("#context-clock").textContent = remaining >= 60 ? Math.floor(remaining / 60) + ":" + String(remaining % 60).padStart(2, "0") : String(remaining);
-  $("#context-clock-label").textContent = state.paused ? "PAUSED" : reveal ? "NEXT WORD" : "TIME LEFT";
-  const proportion = state.endsAt ? Math.max(0, Math.min(1, (state.endsAt - now) / (reveal ? 8000 : (state.durationSeconds + (state.contextClutchSeconds || 0)) * 1000))) : 0;
+  $("#context-clock-label").textContent = state.paused ? "PAUSED" : state.contextMarathonEnded ? "RUN OVER" : state.contextVote ? "VOTE ENDS" : reveal ? "NEXT WORD" : "TIME LEFT";
+  const proportion = state.endsAt ? Math.max(0, Math.min(1, (state.endsAt - now) / (reveal ? state.contextVote ? 10000 : 8000 : (state.durationSeconds + (state.contextClutchSeconds || 0)) * 1000))) : 0;
   $("#context-timer").style.setProperty("--timer-angle", proportion * 360 + "deg");
   $("#context-timer").classList.toggle("urgent", !reveal && remaining <= 10);
   const clutch = state.phase === "playing" && state.contextClutchEvent && Date.now() - state.contextClutchEvent.at < 4500;
@@ -75,9 +84,13 @@ function render(state) {
     if (answerReveal) {
       $("#context-answer-label").textContent = state.winner ? "WORD FOUND! CHAT WINS" : "TIME’S UP · THE WORD WAS";
       $("#context-answer-word").textContent = state.target;
-      $("#context-answer-by").textContent = state.winner ? "Solved by " + state.winner : "A fresh hunt is coming up.";
+      $("#context-answer-by").textContent = state.contextMarathonEnded ? "Marathon over · " + (state.contextMarathonSolves || 0) + " word" + (state.contextMarathonSolves === 1 ? "" : "s") + " solved" : state.winner ? "Solved by " + state.winner + (state.contextMode === "marathon" ? " · +15 seconds" : "") : "A fresh hunt is coming up.";
     }
     $("#context-round").textContent = "R" + String(state.round || 1).padStart(2, "0");
+    $("#theme-vote").classList.toggle("hidden", !state.contextVote);
+    if (state.contextVote) $("#theme-options").innerHTML = state.contextVote.options.map((entry, index) => '<div class="theme-option"><b>' + (index + 1) + '</b><span>' + escapeHtml(entry.label) + '</span><i>' + entry.votes + (entry.votes === 1 ? ' vote' : ' votes') + '</i></div>').join("");
+    $("#active-theme").classList.toggle("hidden", !state.contextTheme || state.contextTheme === "mystery");
+    $("#active-theme").textContent = "THEME · " + ({ animals: "Animals & wildlife", food: "Food & drink", nature: "Nature & gardens", home: "Home & furniture", travel: "Transport & travel", sports: "Sports & games", technology: "Tools & technology" }[state.contextTheme] || "Mystery");
     $("#context-difficulty-badge").textContent = state.contextDifficulty === "normal" ? "STANDARD" : state.contextDifficulty === "hard" ? "EXPERT" : "EASY";
     const community = state.community || {};
     $("#overlay-record-streak").textContent = "BEST STREAK " + (community.bestStreak || 0);

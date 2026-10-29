@@ -45,6 +45,16 @@ permissions require another Twitch sign-in.
   levels. Solver earns 100 points, Biggest Leap 50 and Pathfinder 30. Optional
   clutch time grants five seconds for a five-point improvement near zero, at
   most once per viewer and fifteen bonus seconds per round.
+- **Word Hunt Marathon:** one shared clock for the whole run, three minutes by
+  default. Each solve banks the remaining time plus fifteen seconds, capped at
+  five minutes. Reveals and votes pause the clock; running out ends the run.
+  Community best tracks the most words solved in a run. Clutch bonuses are
+  replaced by solve bonuses. Choose the starting clock before starting a run.
+- **Theme voting:** optionally choose the next Word Hunt category together.
+  After each word, chat has ten seconds to type `1`, `2`, `3` or `!vote N`.
+  Each viewer has one changeable ballot; ties are random, no votes means Mystery.
+  Themes draw from the same unused word bag. Marathon selects voting by default
+  in the dashboard; it can also be enabled for regular rounds.
 - **Wordle:** `!join`, then `!guess WORD`. Six guesses each, public personal
   boards, and 30/45/60-second elimination rounds. A race is capped at 100 players.
 - **Krillion:** one `!answer YOUR ANSWER` per viewer, up to 100 answers per round.
@@ -57,6 +67,18 @@ Broadcaster/moderator chat controls: `!game wordhunt` (or `!game hunt`), `!game 
 `!game krillion [optional question]`, `!stop`. Roles and broadcaster identity
 come from authenticated Twitch EventSub events and are checked server-side.
 The older `!game context` command remains supported.
+`!game marathon` starts a Marathon using saved settings.
+
+Optional chat announcements post round starts, newly available hints, solved or
+missed words, and voting instructions as the connected broadcaster. Existing
+streamers must reconnect Twitch once to grant `user:write:chat`; read-only
+connections can still play. Announcements are paced, and uncertain deliveries
+are not retried to avoid duplicate posts after a restart.
+
+Open **Word history** in the setup card to browse the latest 200 completed
+words, outcomes and five closest other guesses with player names and ranks.
+Older summaries remain visible, but guesses not previously saved cannot be
+recovered. Records and history require persistent storage on hosted deployments.
 
 Word Hunt **always** uses local vectors, even with `OPENAI_API_KEY` configured.
 The installed vocabulary contains 30,000 guess words and 2,302 target nouns:
@@ -77,6 +99,8 @@ broad topic reveals at **Start** (immediately), **Middle** (50%), or **End**
 Middle remains the default for existing games. Pauses freeze the reveal countdown;
 refreshes and restarts preserve it. Once shown, a hint stays revealed through
 timer edits and resets when the next word starts.
+In Marathon, hint timing uses at most the first minute of each word, so banking
+extra time does not delay the hint for several minutes.
 
 ## Host and operate
 

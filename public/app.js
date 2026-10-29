@@ -19,6 +19,10 @@ let selectedDifficulty = ["easy", "normal", "hard"].includes(draft.difficulty) ?
 let clutchEnabled = draft.clutchEnabled !== false;
 let hintsEnabled = draft.hintsEnabled !== false;
 let hintTiming = ["start", "middle", "end"].includes(draft.hintTiming) ? draft.hintTiming : "middle";
+let huntMode = draft.huntMode === "marathon" ? "marathon" : "rounds";
+let themeVoting = draft.themeVoting === true;
+let chatEnabled = draft.chatEnabled !== false;
+let historyRows = [], historyBusy = false, lastHistoryRound = null;
 const durations = { context: 60, krillion: 30, wordle: 45 };
 for (const mode of Object.keys(durations)) {
   const choices = mode === "context" ? [30, 45, 60, 120, 180, 300] : [30, 45, 60];
@@ -49,7 +53,7 @@ function toast(message) {
 function saveDraft() {
   try {
     localStorage.setItem("brb-game-settings", JSON.stringify({
-      mode: selectedGame, durations, prompt: $("#krillion-prompt").value, difficulty: selectedDifficulty, clutchEnabled, hintsEnabled, hintTiming,
+      mode: selectedGame, durations, prompt: $("#krillion-prompt").value, difficulty: selectedDifficulty, clutchEnabled, hintsEnabled, hintTiming, huntMode, themeVoting, chatEnabled,
     }));
   } catch {}
 }
@@ -63,7 +67,8 @@ async function request(path, options = {}) {
 
 function canEditCurrent() {
   return !startingFresh && latestState?.kind === selectedGame &&
-    (latestState.phase === "playing" || selectedGame === "context" && latestState.phase === "finished");
+    (latestState.phase === "playing" || selectedGame === "context" && latestState.phase === "finished") &&
+    (selectedGame !== "context" || !latestState.contextMarathonEnded && huntMode === (latestState.contextMode || "rounds"));
 }
 
 function renderEditor() {
@@ -73,6 +78,15 @@ function renderEditor() {
   $("#context-difficulty").value = selectedDifficulty;
   $("#context-clutch").checked = clutchEnabled;
   $("#context-hints").checked = hintsEnabled;
+  if ($("#context-mode").value !== huntMode) $("#context-mode").value = huntMode;
+  $("#context-theme-voting").checked = themeVoting;
+  $("#context-chat-posts").checked = chatEnabled;
+  $("#marathon-help").classList.toggle("hidden", huntMode !== "marathon");
+  $("#context-duration-label").textContent = huntMode === "marathon" ? "Starting clock" : "Round timer";
+  $("#context-clutch").disabled = huntMode === "marathon";
+  $("#context-clutch").closest("label").querySelector("small").textContent = huntMode === "marathon" ? "Marathon awards +15 seconds per solve instead of clutch bonuses." : "A big improvement near zero earns +5 seconds. Up to +15 seconds per round.";
+  $("#chat-posts-note").textContent = latestState?.chatAnnouncementWarning || (latestConfig?.twitchConfigured && !latestConfig.chatWriteGranted && chatEnabled ? "Reconnect Twitch once to allow game announcements in chat." : "");
+  $("#chat-permission").classList.toggle("hidden", !latestConfig?.twitchAuthenticated || latestConfig.chatWriteGranted || !chatEnabled);
   const hintTimingSelect = $("#context-hint-timing");
   // Preserve the native menu while live updates redraw the dashboard.
   if (hintTimingSelect.value !== hintTiming) hintTimingSelect.value = hintTiming;
@@ -86,6 +100,7 @@ function renderEditor() {
       const selected = Number(button.dataset.seconds) === durations[mode];
       button.classList.toggle("selected", selected);
       button.setAttribute("aria-pressed", String(selected));
+      if (mode === "context") button.disabled = canEditCurrent() && latestState?.contextMode === "marathon";
     });
   }
   const editing = canEditCurrent();
@@ -93,7 +108,7 @@ function renderEditor() {
   $("#context-secret-field").classList.toggle("hidden", editing);
   $("#krillion-prompt-field").classList.toggle("hidden", editing);
   const nextKrillion = selectedGame === "krillion" && latestState?.kind === "krillion" && latestState.phase === "round-complete";
-  $("#game-submit").textContent = busy ? "Saving…" : editing ? selectedGame === "context" ? "Apply settings" : "Apply timer" : nextKrillion ? "Start next round →" : "Start " + gameNames[selectedGame] + " →";
+  $("#game-submit").textContent = busy ? "Saving…" : editing ? selectedGame === "context" ? "Apply settings" : "Apply timer" : nextKrillion ? "Start next round →" : "Start " + (selectedGame === "context" && huntMode === "marathon" ? "Marathon" : gameNames[selectedGame]) + " →";
   $("#game-submit").disabled = busy || !controlsAllowed || selectedGame === "krillion" && !editing && !quota?.available;
   // Like the other draft fields, timing can be chosen before signing in or
   // enabling hints. Authorization remains on Apply and on the server.
@@ -101,12 +116,13 @@ function renderEditor() {
   $("#context-hint-timing-note").textContent = !hintsEnabled
     ? "Turn on Category hint to show it during the game."
     : !controlsAllowed ? "Connect Twitch to apply these settings." : "Save your timing choice with Apply settings or Start game.";
+  if (huntMode === "marathon" && hintsEnabled) $("#context-hint-timing-note").textContent += " Marathon hint timing uses up to the first minute of each word.";
   $("#krillion-quota").textContent = quota ? quota.available ? quota.dailyRemaining + " judged rounds left today · $" + Number(quota.monthlyRemainingUsd).toFixed(2) + " shared AI budget left this month." : quota.reason : "Connect Twitch to see your Krillion allowance.";
   $("#editor-note").textContent = editing
-    ? selectedGame === "context" ? "Timer, hint and clutch changes apply now. Difficulty changes apply to the next word. Answers and progress are kept." : "Timer changes keep this round’s answers and progress. Time is measured from when the round began."
+    ? selectedGame === "context" ? huntMode === "marathon" ? "Hint, voting and chat changes apply now. Difficulty changes apply to the next word. Start fresh to change the starting clock." : "Timer, hint and clutch changes apply now. Difficulty changes apply to the next word. Answers and progress are kept." : "Timer changes keep this round’s answers and progress. Time is measured from when the round began."
     : startingFresh && latestState?.kind !== "idle"
       ? "Starting fresh resets the current game and its progress."
-      : selectedGame === "context" ? "Each new round uses this time limit." : "";
+      : selectedGame === "context" ? huntMode === "marathon" ? "One clock for the run. Solves add 15 seconds; reveals and votes pause it." : "Each new round uses this time limit." : "";
   const sameGameRunning = latestState?.kind === selectedGame && (latestState.phase === "playing" || selectedGame === "context" && latestState.phase === "finished");
   $("#fresh-game").classList.toggle("hidden", !sameGameRunning);
   $("#fresh-game").textContent = startingFresh ? "Back to editing" : "Start fresh";
@@ -134,12 +150,15 @@ function renderControl(state) {
       clutchEnabled = state.contextClutchEnabled !== false;
       hintsEnabled = state.contextHintsEnabled !== false;
       hintTiming = ["start", "middle", "end"].includes(state.contextHintTiming) ? state.contextHintTiming : "middle";
+      huntMode = state.contextMode || "rounds";
+      themeVoting = state.contextThemeVoting === true;
+      chatEnabled = state.contextChatEnabled !== false;
     }
     hydratedGame = true;
     saveDraft();
   }
   $("#live-title").textContent = gameNames[state.kind] || "No game running";
-  const phase = state.kind === "context" && state.phase === "finished" ? "NEXT ROUND" : state.phase.toUpperCase().replaceAll("-", " ");
+  const phase = state.contextMarathonEnded ? "RUN OVER" : state.kind === "context" && state.phase === "finished" ? "NEXT ROUND" : state.phase.toUpperCase().replaceAll("-", " ");
   $("#phase-badge").textContent = state.paused ? "PAUSED" : phase;
   $("#phase-badge").classList.toggle("active", state.phase === "playing");
   $("#live-message").textContent = state.message;
@@ -164,6 +183,34 @@ function renderControl(state) {
   renderCommunity(state);
   renderClock();
   renderEditor();
+  if (state.kind === "context" && state.phase === "finished" && lastHistoryRound !== state.contextRoundId) {
+    lastHistoryRound = state.contextRoundId;
+    if ($("#round-history").open) loadHistory(true);
+  }
+}
+
+async function loadHistory(reset = false) {
+  if (historyBusy || !controlsAllowed) return;
+  historyBusy = true;
+  try {
+    const result = await request("/api/history?offset=" + (reset ? 0 : historyRows.length));
+    historyRows = reset ? result.rounds : [...historyRows, ...result.rounds];
+    $("#history-count").textContent = result.total + " completed word" + (result.total === 1 ? "" : "s");
+    const list = $("#history-rounds"); list.replaceChildren();
+    for (const round of historyRows) {
+      const detail = document.createElement("details"); detail.className = "history-round";
+      const title = document.createElement("summary"); title.textContent = round.word + " · " + (round.won ? "SOLVED" : "MISSED") + " · " + (round.mode === "marathon" ? "Marathon" : "Rounds");
+      const meta = document.createElement("p"); meta.textContent = new Date(round.completedAt).toLocaleString() + " · " + (round.theme || "Mystery") + " · " + (round.guessCount ?? "—") + " guesses" + (round.solvedMs !== null ? " · " + (round.solvedMs / 1000).toFixed(1) + "s" : "");
+      const guesses = document.createElement("ol");
+      for (const guess of round.closestGuesses || []) { const row = document.createElement("li"); row.textContent = guess.word + " · #" + guess.rank + " · " + Math.round(Math.max(0, guess.similarity || 0) * 100) + "% · " + guess.by; guesses.append(row); }
+      detail.append(title, meta, guesses);
+      if (!round.closestGuesses?.length) { const empty = document.createElement("p"); empty.textContent = round.closestGuesses ? "No other guesses this round." : "Guess details were not saved for this older round."; detail.append(empty); }
+      list.append(detail);
+    }
+    if (!historyRows.length) list.textContent = "Completed words will appear here.";
+    $("#history-more").classList.toggle("hidden", !result.hasMore);
+  } catch (error) { toast(error.message); }
+  finally { historyBusy = false; }
 }
 
 function renderCommunity(state) {
@@ -174,6 +221,7 @@ function renderCommunity(state) {
   $("#record-streak").textContent = String(records.bestStreak || 0);
   $("#record-fastest").textContent = records.fastestSolve ? (records.fastestSolve.ms / 1000).toFixed(1) + "s" : "—";
   $("#record-fastest-detail").textContent = records.fastestSolve ? records.fastestSolve.by + " found “" + records.fastestSolve.word + "” · " + (records.fastestSolve.difficulty === "normal" ? "Standard" : records.fastestSolve.difficulty === "hard" ? "Expert" : "Easy") : "Records are saved for this community after each round.";
+  $("#record-marathon").textContent = "Best Marathon: " + (records.bestMarathonWords || 0) + " words in one run.";
   for (const [id, scores] of [["session-leaders", state.contextSessionScores || []], ["community-leaders", records.leaderboard || []]]) {
     const list = $("#" + id);
     list.replaceChildren();
@@ -230,6 +278,9 @@ async function refreshConfig() {
         clutchEnabled = settings.clutchEnabled !== false;
         hintsEnabled = settings.hintsEnabled !== false;
         hintTiming = ["start", "middle", "end"].includes(settings.hintTiming) ? settings.hintTiming : "middle";
+        huntMode = settings.huntMode === "marathon" ? "marathon" : "rounds";
+        themeVoting = settings.themeVoting === true;
+        chatEnabled = settings.chatEnabled !== false;
         if (typeof settings.prompt === "string") $("#krillion-prompt").value = settings.prompt;
         hydratedSettings = true;
       }
@@ -299,6 +350,12 @@ $("#context-secret").addEventListener("input", () => { editorDirty = true; });
 $("#context-difficulty").addEventListener("change", (event) => { editorDirty = true; selectedDifficulty = event.target.value; saveDraft(); renderEditor(); });
 $("#context-hints").addEventListener("change", (event) => { editorDirty = true; hintsEnabled = event.target.checked; saveDraft(); renderEditor(); });
 $("#context-hint-timing").addEventListener("change", (event) => { editorDirty = true; hintTiming = event.target.value; saveDraft(); renderEditor(); });
+$("#context-mode").addEventListener("change", (event) => { editorDirty = true; huntMode = event.target.value; if (huntMode === "marathon") { durations.context = 180; themeVoting = true; } saveDraft(); renderEditor(); });
+$("#context-theme-voting").addEventListener("change", (event) => { editorDirty = true; themeVoting = event.target.checked; saveDraft(); renderEditor(); });
+$("#context-chat-posts").addEventListener("change", (event) => { editorDirty = true; chatEnabled = event.target.checked; saveDraft(); renderEditor(); });
+$("#chat-permission").addEventListener("click", () => { location.href = "/auth/start"; });
+$("#round-history").addEventListener("toggle", () => { if ($("#round-history").open) loadHistory(true); });
+$("#history-more").addEventListener("click", () => loadHistory(false));
 $("#context-clutch").addEventListener("change", (event) => { editorDirty = true; clutchEnabled = event.target.checked; saveDraft(); renderEditor(); });
 $("#fresh-game").addEventListener("click", () => { startingFresh = !startingFresh; renderEditor(); });
 $("#game-form").addEventListener("submit", async (event) => {
@@ -314,6 +371,7 @@ $("#game-form").addEventListener("submit", async (event) => {
         secret: selectedGame === "context" ? $("#context-secret").value.trim() || undefined : undefined,
         prompt: selectedGame === "krillion" ? $("#krillion-prompt").value.trim() || undefined : undefined };
   busy = true;
+  if (selectedGame === "context") Object.assign(body, { huntMode, themeVoting, chatEnabled });
   renderEditor();
   try {
     await control(body);

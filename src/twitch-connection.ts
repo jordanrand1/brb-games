@@ -14,6 +14,7 @@ export class TwitchConnection {
   private enabled = false;
   private validatedAt = 0;
   private handled = new Set<string>();
+  private lastPostAt = 0;
   private readonly maintenance: ReturnType<typeof setInterval>;
 
   readonly session: TwitchSession;
@@ -48,6 +49,32 @@ export class TwitchConnection {
     this.state("Paused", "Chat reconnects when you open your dashboard or OBS source.");
   }
   dispose(): void { this.stop(); clearInterval(this.maintenance); }
+
+  get canPost(): boolean { return this.session.scopes?.includes("user:write:chat") === true; }
+
+  async sendChat(text: string): Promise<void> {
+    if (!this.enabled || this.status !== "Connected" || !this.canPost) throw new Error("Reconnect Twitch to enable chat announcements.");
+    const generation = this.generation;
+    const wait = Math.max(0, this.lastPostAt + 1700 - Date.now());
+    if (wait) await new Promise((resolve) => setTimeout(resolve, wait));
+    if (!this.enabled || generation !== this.generation) throw new Error("Chat connection paused.");
+    await this.ensureToken();
+    if (!this.enabled || generation !== this.generation) throw new Error("Chat connection paused.");
+    this.lastPostAt = Date.now();
+    const send = () => fetch("https://api.twitch.tv/helix/chat/messages", {
+      method: "POST", headers: { "Client-Id": this.options.clientId, Authorization: `Bearer ${this.session.accessToken}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ broadcaster_id: this.session.userId, sender_id: this.session.userId, message: text.slice(0, 500) }), signal: AbortSignal.timeout(8000),
+    });
+    let response = await send();
+    if (response.status === 401) {
+      await this.ensureToken(false, true);
+      if (!this.enabled || generation !== this.generation) throw new Error("Chat connection paused.");
+      response = await send();
+    }
+    if (!response.ok) throw new Error(response.status === 403 || response.status === 401 ? "Reconnect Twitch to allow chat announcements." : "Twitch could not accept a chat announcement.");
+    const data = await response.json() as { data?: Array<{ is_sent?: boolean }> };
+    if (!data.data?.[0]?.is_sent) throw new Error("Twitch did not deliver the announcement. Check channel chat restrictions.");
+  }
 
   private async ensureToken(validate = false, force = false): Promise<void> {
     if (this.tokenWork) return this.tokenWork;

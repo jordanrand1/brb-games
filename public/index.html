@@ -49,11 +49,14 @@
             <p id="game-description" class="field-help"></p>
 
             <div class="mode-settings" data-mode="context">
+              <label class="field-label" for="context-mode">Word Hunt mode</label>
+              <select id="context-mode" class="text-field"><option value="rounds">Rounds · a timer for each word</option><option value="marathon">Marathon · one shared clock</option></select>
+              <p id="marathon-help" class="field-help hidden">Start with 3 minutes. Each solve earns +15 seconds, up to 5 minutes banked. The clock pauses for reveals and voting.</p>
               <label class="field-label" for="context-difficulty">Difficulty</label>
               <select id="context-difficulty" class="text-field"><option value="easy" selected>Easy · everyday nouns</option><option value="normal">Standard · reviewed familiar nouns</option><option value="hard">Expert · specialist vocabulary</option></select>
               <p id="context-bag-note" class="field-help">Words come from a shuffled bag with no repeats until the pool is used.</p>
               <p id="context-model-note" class="field-help">Commonsense word associations · rank #1 is the answer.</p>
-              <label class="field-label">Round timer</label>
+              <label id="context-duration-label" class="field-label">Round timer</label>
               <div class="timer-options" id="context-duration" role="group" aria-label="Word Hunt round timer">
                 <button type="button" data-seconds="30">30 sec</button><button type="button" data-seconds="45">45 sec</button><button type="button" data-seconds="60" class="selected">1 min</button><button type="button" data-seconds="120">2 min</button><button type="button" data-seconds="180">3 min</button><button type="button" data-seconds="300">5 min</button>
               </div>
@@ -62,6 +65,9 @@
               <label class="field-label" for="context-hint-timing">Reveal hint</label>
               <select id="context-hint-timing" class="text-field"><option value="start">Start · immediately</option><option value="middle" selected>Middle · halfway through</option><option value="end">End · final quarter</option></select>
               <p id="context-hint-timing-note" class="field-help">Choose when to reveal the category hint.</p>
+              <label class="toggle-setting" for="context-theme-voting"><span><strong>Theme voting</strong><small>Chat votes 1, 2 or 3 between words. One vote per viewer; changing your vote is allowed.</small></span><input id="context-theme-voting" type="checkbox"></label>
+              <label class="toggle-setting" for="context-chat-posts"><span><strong>Chat announcements</strong><small>Post solves, new words, category hints and theme votes as your Twitch account.</small></span><input id="context-chat-posts" type="checkbox" checked></label>
+              <p id="chat-posts-note" class="field-help"></p><button id="chat-permission" class="button button-outline button-small hidden" type="button">Enable Twitch chat posts</button>
               <div id="context-secret-field" class="optional-field">
                 <label class="field-label" for="context-secret">Secret noun <span>optional</span></label>
                 <input id="context-secret" class="text-field" maxlength="24" placeholder="Random word, or choose one…" autocomplete="off">
@@ -99,10 +105,12 @@
             <p id="community-name" class="community-name">Local demo</p>
             <div class="community-stats"><div><strong id="record-wins">0</strong><span>TOTAL WINS</span></div><div><strong id="record-streak">0</strong><span>BEST STREAK</span></div><div><strong id="record-fastest">—</strong><span>FASTEST SOLVE</span></div></div>
             <p id="record-fastest-detail" class="field-help"></p>
+            <p id="record-marathon" class="field-help"></p>
             <p class="leaderboard-label">THIS HUNT</p><ol id="session-leaders" class="contributor-list"></ol>
             <p class="leaderboard-label">ALL TIME</p><ol id="community-leaders" class="contributor-list"></ol>
             <p class="field-help award-rules">Solver +100 · Biggest leap +50 · Pathfinder +30. Pathfinder rewards the most useful new best guesses. Duplicate guesses earn no extra credit.</p>
           </details>
+          <details id="round-history" class="community-panel"><summary>Word history <span id="history-count"></span></summary><p class="field-help">Latest 200 completed words, with the five closest other guesses.</p><div id="history-rounds"></div><button id="history-more" class="text-button hidden" type="button">Load more</button></details>
         </section>
 
         <section class="panel source-panel" aria-labelledby="preview-heading">

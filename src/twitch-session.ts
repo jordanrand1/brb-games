@@ -10,6 +10,7 @@ export type TwitchSession = {
   displayName: string;
   expiresAt: number;
   sessionExpiresAt?: number;
+  scopes?: string[];
 };
 
 const SESSION_LIFETIME_MS = 14 * 24 * 60 * 60_000;
@@ -87,11 +88,12 @@ export async function refreshTwitchToken(session: TwitchSession, clientId: strin
   });
   if (response.status === 400 || response.status === 401) throw new TwitchAuthorizationError("Twitch authorization expired. Connect Twitch again.");
   if (!response.ok) throw new Error(`Twitch token refresh failed (${response.status}). Retrying shortly.`);
-  const token = await response.json() as { access_token: string; refresh_token?: string; expires_in: number };
+  const token = await response.json() as { access_token: string; refresh_token?: string; expires_in: number; scope?: string[] };
   if (!token.access_token || !Number.isFinite(token.expires_in)) throw new Error("Twitch returned an invalid token response.");
   session.accessToken = token.access_token;
   session.refreshToken = token.refresh_token || session.refreshToken;
   session.expiresAt = Date.now() + token.expires_in * 1000;
+  if (Array.isArray(token.scope)) session.scopes = token.scope;
 }
 
 export async function validateTwitchToken(session: TwitchSession, clientId: string, fetcher: typeof fetch = fetch): Promise<boolean> {
@@ -100,9 +102,10 @@ export async function validateTwitchToken(session: TwitchSession, clientId: stri
   });
   if (response.status === 401) return false;
   if (!response.ok) throw new Error(`Twitch token validation failed (${response.status}).`);
-  const data = await response.json() as { client_id: string; user_id: string; expires_in: number };
+  const data = await response.json() as { client_id: string; user_id: string; expires_in: number; scopes?: string[] };
   if (data.client_id !== clientId || data.user_id !== session.userId) throw new TwitchAuthorizationError("This Twitch login belongs to a different app or account. Connect Twitch again.");
   if (!Number.isFinite(data.expires_in)) throw new Error("Twitch returned an invalid token validation response.");
   session.expiresAt = Date.now() + data.expires_in * 1000;
+  if (Array.isArray(data.scopes)) session.scopes = data.scopes;
   return true;
 }

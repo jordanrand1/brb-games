@@ -6,11 +6,11 @@ globalThis.fetch = (async (input, init) => {
   const url = new URL(String(input));
   if (url.hostname === "id.twitch.tv" && url.pathname === "/oauth2/token") {
     const form = init?.body as URLSearchParams, id = form.get("code") || tokenId(form.get("refresh_token") || "101");
-    return Response.json({ access_token: "access-" + id, refresh_token: "refresh-" + id, expires_in: 3600, scope: ["user:read:chat"] });
+    return Response.json({ access_token: "access-" + id, refresh_token: "refresh-" + id, expires_in: 3600, scope: ["user:read:chat", "user:write:chat"] });
   }
   if (url.hostname === "id.twitch.tv" && url.pathname === "/oauth2/validate") {
     const id = tokenId((init?.headers as any).Authorization);
-    return Response.json({ client_id: "test-client", user_id: id, expires_in: 3600 });
+    return Response.json({ client_id: "test-client", user_id: id, expires_in: 3600, scopes: ["user:read:chat", "user:write:chat"] });
   }
   if (url.hostname === "api.twitch.tv" && url.pathname === "/helix/users") {
     const id = tokenId((init?.headers as any).Authorization);
@@ -23,6 +23,13 @@ globalThis.fetch = (async (input, init) => {
     return Response.json({ data: [] }, { status: 202 });
   }
   if (url.hostname === "id.twitch.tv" && url.pathname === "/oauth2/revoke") return new Response(null, { status: 200 });
+  if (url.hostname === "api.twitch.tv" && url.pathname === "/helix/chat/messages") {
+    const data = JSON.parse(String(init?.body));
+    const id = tokenId((init?.headers as any).Authorization);
+    if (data.sender_id !== id || data.broadcaster_id !== id) return new Response(null, { status: 403 });
+    process.send?.({ type: "sent-chat", channel: id, text: data.message });
+    return Response.json({ data: [{ message_id: randomUUID(), is_sent: true }] });
+  }
   throw new Error("Unexpected network request in isolated test: " + url.origin);
 }) as typeof fetch;
 class FakeSocket extends EventTarget {

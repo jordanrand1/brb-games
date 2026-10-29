@@ -16,9 +16,11 @@ export type HuntRoundResult = {
   id: string; word: string; difficulty: ContextDifficulty; won: boolean; streak: number;
   solvedMs: number | null; completedAt: number; awards: ContributionAward[];
   participants: Array<{ login: string; displayName: string }>;
+  closestGuesses?: Array<{ word: string; by: string; rank: number; similarity?: number }>;
+  guessCount?: number; mode?: "rounds" | "marathon"; theme?: string; marathonSolves?: number;
 };
 type FastestSolve = { ms: number; by: string; word: string; difficulty: ContextDifficulty };
-export type CommunityRecords = { rounds: number; wins: number; bestStreak: number; fastestSolve: FastestSolve | null };
+export type CommunityRecords = { rounds: number; wins: number; bestStreak: number; fastestSolve: FastestSolve | null; bestMarathonWords?: number };
 type WordBag = { signature: string; remaining: string[]; lastWord: string | null; cycle: number };
 type CommunityData = {
   version: 1; id: string; name: string; records: CommunityRecords;
@@ -109,7 +111,20 @@ export class CommunityStore {
       leaderboard: Object.values(data.players).sort((a, b) => b.points - a.points || b.solves - a.solves || a.login.localeCompare(b.login)).slice(0, 5) });
   }
 
-  drawTarget(id: string, difficulty: ContextDifficulty, words: string[], manualWord?: string): string {
+  availableTargets(id: string, difficulty: ContextDifficulty, words: string[]): string[] {
+    const bag = this.data(id).bags[difficulty];
+    const signature = createHash("sha256").update(words.join("\n")).digest("hex");
+    return bag?.signature === signature && bag.remaining.length ? [...bag.remaining] : [...words];
+  }
+
+  history(id: string, offset = 0, limit = 20): { rounds: HuntRoundResult[]; total: number; hasMore: boolean } {
+    const rounds = [...this.data(id).recentRounds].reverse();
+    offset = Math.max(0, Math.min(200, Math.floor(offset) || 0));
+    limit = Math.max(1, Math.min(20, Math.floor(limit) || 20));
+    return { rounds: structuredClone(rounds.slice(offset, offset + limit)), total: rounds.length, hasMore: offset + limit < rounds.length };
+  }
+
+  drawTarget(id: string, difficulty: ContextDifficulty, words: string[], manualWord?: string, eligible?: string[]): string {
     if (!words.length) throw new Error("This difficulty has no target words installed.");
     if (manualWord && !words.includes(manualWord)) throw new Error("That word is not in the target list.");
     const data = this.data(id);
@@ -126,7 +141,10 @@ export class CommunityStore {
       bag = { signature, remaining: shuffled, lastWord: previous, cycle: (bag?.cycle || 0) + 1 };
       data.bags[difficulty] = bag;
     }
-    const word = manualWord || bag.remaining[bag.remaining.length - 1]!;
+    const eligibleSet = eligible ? new Set(eligible) : null;
+    const candidates = eligibleSet ? bag.remaining.filter((word) => eligibleSet.has(word)) : bag.remaining;
+    if (!manualWord && !candidates.length) throw new Error("This theme has no unused answers left.");
+    const word = manualWord || candidates[candidates.length - 1]!;
     bag.remaining = bag.remaining.filter((candidate) => candidate !== word);
     bag.lastWord = word;
     this.save(data);
@@ -159,6 +177,7 @@ export class CommunityStore {
     data.records.rounds += 1;
     if (result.won) data.records.wins += 1;
     data.records.bestStreak = Math.max(data.records.bestStreak, result.streak);
+    if (result.mode === "marathon") data.records.bestMarathonWords = Math.max(data.records.bestMarathonWords || 0, result.marathonSolves || 0);
     if (result.won && result.solvedMs !== null && (!data.records.fastestSolve || result.solvedMs < data.records.fastestSolve.ms)) {
       data.records.fastestSolve = { ms: result.solvedMs, by: result.awards.find((award) => award.kind === "solver")?.displayName || "Chat", word: result.word, difficulty: result.difficulty };
     }

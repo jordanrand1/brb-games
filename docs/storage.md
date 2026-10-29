@@ -10,7 +10,7 @@ app processes against the same disk or copy only the live main database file.
 | Twitch credentials | AES-256-GCM encrypted in `accounts`, removed on disconnect/revocation/deletion |
 | Browser sessions | Signed HttpOnly cookie + `sessions`, 14-day expiration; disconnect invalidates all channel sessions |
 | Active game, guesses, timer, current streak and scores | `snapshots`, after each game change and every five seconds |
-| Community scores, shuffled bags, latest 200 round summaries | `communities`, until channel deletion |
+| Community scores, Marathon best, shuffled bags, latest 200 round summaries with five closest other guesses and player names | `communities`, until channel deletion |
 | Completed round IDs | `completed_rounds`, permanent per-channel duplicate protection, deleted with the channel |
 | AI reservations, usage and completed scoring results | `ai_requests`; uncertain requests retain their maximum charge |
 | Backups | Encrypted consistent SQLite export in private R2 Standard storage, seven-day lifecycle |
@@ -19,6 +19,16 @@ Only game submissions are saved, not a general Twitch chat log. Public game stat
 omits secrets until reveal and omits Krillion answers until judging is complete.
 SSE state is scoped to a broadcaster's authenticated session or an unguessable
 read-only OBS capability. Refresh gets a complete state, then bounded patches.
+Theme ballots are checkpointed privately; clients receive only aggregate vote
+counts. Marathon's shared clock freezes during reveals, votes and idle pauses.
+Chat announcements are claimed durably before sending; a delivery with an unknown
+outcome is not retried. Missed announcements do not prevent gameplay.
+
+On Render, setting `BRB_DATA_DIR=/var/data` alone does not make data persistent.
+Attach a persistent disk mounted at `/var/data`. Without it, a restart or redeploy
+can erase accounts, sessions, scores, history, word bags and the AI budget ledger.
+Do not enable paid Krillion judging on an ephemeral deployment. Adding a disk
+triggers a redeploy and does not automatically migrate the prior filesystem.
 
 `SESSION_SECRET` signs browser cookies. `ENCRYPTION_KEY` encrypts Twitch
 credentials and separately derives a purpose-specific backup key. Store both in

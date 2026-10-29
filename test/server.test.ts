@@ -78,12 +78,16 @@ test("hosted OAuth, control authorization, channel SSE, refresh, rotation and de
   const control1 = await app.stream(one.cookie), public1 = await app.stream("", token1);
   const first = await control1.next(), publicState = await public1.next();
   assert.equal(first.privateTarget, "tiger"); assert.equal(publicState.privateTarget, undefined); assert.equal(publicState.target, undefined);
+  assert.equal((await app.call("/api/history")).status, 401);
   assert.equal(publicState.contextHint, null); assert.equal(publicState.contextHintAt, null);
   await delay(40);
   app.send({ type: "chat", channel: "101", login: "outsider", text: "!stop" }); await delay(40);
   assert.equal((await (await app.call("/api/state?view=control", one.cookie)).json()).kind, "context");
   app.send({ type: "chat", channel: "101", login: "solver", text: "tiger" });
   const patch = await public1.next("patch"); assert.equal(patch.target, "tiger"); assert.equal(patch.winner, "solver");
+  const history = await (await app.call("/api/history", one.cookie)).json();
+  assert.equal(history.rounds[0].word, "tiger"); assert.deepEqual(history.rounds[0].closestGuesses, []);
+  assert.equal((await (await app.call("/api/history?channel=101", two.cookie)).json()).rounds.length, 0);
   const other = await (await app.call("/api/state?view=control", two.cookie)).json(); assert.equal(other.privateTarget, "tree"); assert.equal(other.winner, null);
   control1.close(); public1.close();
   await app.restart();
