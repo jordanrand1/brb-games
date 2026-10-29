@@ -85,7 +85,7 @@ function renderEditor() {
   $("#context-duration-label").textContent = huntMode === "marathon" ? "Starting clock" : "Round timer";
   $("#context-clutch").disabled = huntMode === "marathon";
   $("#context-clutch").closest("label").querySelector("small").textContent = huntMode === "marathon" ? "Marathon awards +15 seconds per solve instead of clutch bonuses." : "A big improvement near zero earns +5 seconds. Up to +15 seconds per round.";
-  $("#chat-posts-note").textContent = latestState?.chatAnnouncementWarning || (latestConfig?.twitchConfigured && !latestConfig.chatWriteGranted && chatEnabled ? "Reconnect Twitch once to allow game announcements in chat." : "");
+  $("#chat-posts-note").textContent = latestState?.chatAnnouncementWarning || (latestConfig?.twitchAuthenticated && !latestConfig.chatWriteGranted && chatEnabled ? "Reconnect Twitch once to allow game announcements in chat." : "");
   $("#chat-permission").classList.toggle("hidden", !latestConfig?.twitchAuthenticated || latestConfig.chatWriteGranted || !chatEnabled);
   const hintTimingSelect = $("#context-hint-timing");
   // Preserve the native menu while live updates redraw the dashboard.
