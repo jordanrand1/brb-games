@@ -54,7 +54,7 @@ OVERRIDES = {
 # also be a sweater, a seal a stamp, and tuna a cactus). Keep these explicit.
 REVIEWED = {
     "animals": "cat dog rabbit horse cow sheep goat pig chicken duck goose turkey eagle owl hawk parrot penguin whale dolphin shark octopus seal turtle frog snake lizard crocodile lion tiger bear wolf fox deer mouse rat squirrel bee butterfly spider ant crab lobster salmon trout tuna elephant giraffe zebra monkey gorilla kangaroo panda blowfish sardine oyster clam feather beak claw snout tail hoof wing mane beehive feeder",
-    "plants": "hyacinth gourd", 
+    "plants": "hyacinth gourd",
     "nature": "forest garden snowball dew icicle saltwater seawater soil meadow snowman shell seashell twig splinter",
     "materials": "gold silver wool silk cotton leather cashmere fabric satin linen flannel cloth velvet mulch alloy",
     "places": "school museum village zoo warehouse country farm orchard vineyard market laboratory gym cinema studio ranch backyard corridor passageway doorway hallway depot courtyard ditch footpath roadside pathway lane trench mine shed nursery",
@@ -66,7 +66,7 @@ REVIEWED = {
     "body": "heart rib vitamin aspirin bandage crutch wheelchair denture lotion",
     "food": "apple orange banana lemon lime grape strawberry blueberry cherry peach pear melon pineapple mango coconut avocado tomato potato carrot onion garlic lettuce spinach broccoli corn rice bread pasta pizza burger sandwich cheese butter egg soup salad cookie cake chocolate honey sugar salt pepper coffee tea milk juice cereal sausage bacon yogurt cream toast flour bean pea nut peanut almond mushroom pancake waffle noodle popcorn donut cupcake candy pumpkin cucumber cabbage celery apricot plum beef pork poultry walnut nectar sourdough wafer lentil oat barley wheat grain lager",
     "people": "queen giant",
-    "objects": "coffin casket urn container vessel", 
+    "objects": "coffin casket urn container vessel",
 }
 
 
