@@ -79,9 +79,25 @@ The API retains the `hard` identifier for compatibility with saved settings.
 
 ## Assets, rebuilding and upgrades
 
-The bundle contains `local-vectors.bin`, `local-vocab.json`, `context-targets.json`
-and `semantic-model.json`. The manifest pins dimensions, counts, the source,
-license and hashes of all three data files. Startup rejects a partial or mixed
+Category hints use a static, reviewed mapping built from WordNet noun categories
+and broader ancestors, with explicit corrections for familiar homonyms. They
+require no API. `scripts/category_hints.py` builds `context-categories.json`; its
+hash is pinned in the model manifest and every answer must have a category.
+Regenerate it with `python3 scripts/category_hints.py --wordnet-zip PATH` after
+editing category overrides. A full vector rebuild also generates categories.
+
+The optional hint appears halfway through the configured duration, independently
+of guess warmth. The server withholds the category from public state until reveal.
+The public deadline drives the browser countdown, while the server's tick reveals
+and checkpoints it. Pausing freezes that deadline; resuming shifts it with the
+round timer. Clutch time leaves it unchanged. A duration edit before reveal moves
+halfway, while an already revealed hint remains revealed. Disabling hints hides
+them immediately. Each new word resets the reveal flag. Existing snapshots gain
+enabled hints by default without losing their current guesses.
+
+The bundle contains `local-vectors.bin`, `local-vocab.json`, `context-targets.json`,
+`context-categories.json`, and `semantic-model.json`. The manifest pins dimensions, counts, the source,
+license and hashes of all four data files. Startup rejects a partial or mixed
 install. The data is a transformed Numberbatch subset under CC BY-SA 4.0; see
 `licenses/NUMBERBATCH.txt` for attribution. The WordNet notice is kept separately.
 

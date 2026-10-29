@@ -204,7 +204,7 @@ const server = createServer(async (req, res) => {
       const room = roomFor(req);
       if (room.storageError) throw new HttpError(503, "Game storage is unavailable. Contact the operator.");
       const value = await body(req), action = String(value.action || "");
-      const options = { difficulty: typeof value.difficulty === "string" ? value.difficulty as ContextDifficulty : undefined, clutchEnabled: typeof value.clutchEnabled === "boolean" ? value.clutchEnabled : undefined };
+      const options = { difficulty: typeof value.difficulty === "string" ? value.difficulty as ContextDifficulty : undefined, clutchEnabled: typeof value.clutchEnabled === "boolean" ? value.clutchEnabled : undefined, hintsEnabled: typeof value.hintsEnabled === "boolean" ? value.hintsEnabled : undefined };
       try {
         if (action === "context") room.game.startContext(typeof value.secret === "string" ? value.secret : undefined, Number(value.durationSeconds || 60), options);
         else if (action === "wordle") room.game.startWordle(Number(value.durationSeconds || 45), typeof value.secret === "string" ? value.secret : undefined);
@@ -218,7 +218,7 @@ const server = createServer(async (req, res) => {
       if (account && ["context", "wordle", "krillion", "configure"].includes(action)) database.saveSettings(account.id, {
         ...account.settings, mode: room.game.state.kind, durationSeconds: room.game.state.durationSeconds,
         durations: { ...(account.settings.durations as object || {}), [room.game.state.kind]: room.game.state.durationSeconds },
-        ...(room.game.state.kind === "context" ? { difficulty: room.game.state.contextNextDifficulty, clutchEnabled: room.game.state.contextClutchEnabled } : {}),
+        ...(room.game.state.kind === "context" ? { difficulty: room.game.state.contextNextDifficulty, clutchEnabled: room.game.state.contextClutchEnabled, hintsEnabled: room.game.state.contextHintsEnabled } : {}),
         ...(room.game.state.kind === "krillion" ? { prompt: room.game.state.krillionPrompt } : {}),
       });
       json(res, 200, { ok: true, state: rooms.state(room, "control") }); return;

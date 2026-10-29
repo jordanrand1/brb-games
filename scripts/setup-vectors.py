@@ -4,6 +4,7 @@
 import argparse
 import gzip
 import hashlib
+import importlib.util
 import json
 import math
 import re
@@ -23,6 +24,7 @@ OUTPUT_VECTORS = ROOT / "src" / "local-vectors.bin"
 OUTPUT_WORDS = ROOT / "src" / "local-vocab.json"
 OUTPUT_TARGETS = ROOT / "src" / "context-targets.json"
 OUTPUT_MODEL = ROOT / "src" / "semantic-model.json"
+OUTPUT_CATEGORIES = ROOT / "src" / "context-categories.json"
 MAX_WORDS = 30_000
 DIMENSIONS = 300
 STOP_WORDS = set("""
@@ -210,12 +212,16 @@ def build(model_path: Path, vocab_path: Path, wordnet_path: Path) -> None:
     data = b"".join(found[word] for word in words)
     vocab = json.dumps(words, separators=(",", ":")).encode()
     pools = json.dumps(targets, separators=(",", ":")).encode()
+    spec = importlib.util.spec_from_file_location("category_hints", ROOT / "scripts" / "category_hints.py")
+    category_module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(category_module)
+    categories = category_module.generate(wordnet_path, targets)
     digest = hashlib.sha256(data).hexdigest()
     manifest = {"id": "numberbatch-en-19.08-" + digest[:12], "label": "ConceptNet Numberbatch 19.08", "dimensions": DIMENSIONS,
         "vocabularySize": len(words), "targetCount": target_count, "source": MODEL_URL,
         "license": "CC-BY-SA-4.0", "vectorSha256": digest, "vocabSha256": hashlib.sha256(vocab).hexdigest(),
-        "targetSha256": hashlib.sha256(pools).hexdigest()}
-    for path, content in [(OUTPUT_VECTORS, data), (OUTPUT_WORDS, vocab), (OUTPUT_TARGETS, pools), (OUTPUT_MODEL, json.dumps(manifest, indent=2).encode() + b"\n")]:
+        "targetSha256": hashlib.sha256(pools).hexdigest(), "categorySha256": hashlib.sha256(categories).hexdigest()}
+    for path, content in [(OUTPUT_VECTORS, data), (OUTPUT_WORDS, vocab), (OUTPUT_TARGETS, pools), (OUTPUT_CATEGORIES, categories), (OUTPUT_MODEL, json.dumps(manifest, indent=2).encode() + b"\n")]:
         temporary = path.with_suffix(path.suffix + ".tmp")
         temporary.write_bytes(content)
         temporary.replace(path)
@@ -235,7 +241,7 @@ def main() -> None:
     if args.refresh_targets:
         refresh_targets()
         return
-    if not args.rebuild and not any([args.source, args.vocab, args.wordnet_zip]) and all(path.exists() for path in [OUTPUT_VECTORS, OUTPUT_WORDS, OUTPUT_TARGETS, OUTPUT_MODEL]):
+    if not args.rebuild and not any([args.source, args.vocab, args.wordnet_zip]) and all(path.exists() for path in [OUTPUT_VECTORS, OUTPUT_WORDS, OUTPUT_TARGETS, OUTPUT_MODEL, OUTPUT_CATEGORIES]):
         print("Local commonsense data is already installed. Use --rebuild to regenerate it.")
         return
     with tempfile.TemporaryDirectory(prefix="brb-vectors-") as directory:

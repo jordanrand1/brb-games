@@ -31,6 +31,15 @@ window.addEventListener("resize", fitOverlay);
 
 function updateContextClock(state) {
   const now = state.paused ? state.pausedAt : Date.now();
+  const category = $("#context-category-hint");
+  const hasHint = state.phase === "playing" && state.contextHintsEnabled !== false && (state.contextHint || state.contextHintAt);
+  category.classList.toggle("hidden", !hasHint);
+  category.classList.toggle("hint-revealed", Boolean(state.contextHint));
+  if (hasHint) {
+    $("#context-category-label").textContent = state.contextHint ? "CATEGORY REVEALED" : "CATEGORY HINT";
+    const wait = Math.max(0, Math.ceil((state.contextHintAt - now) / 1000));
+    $("#context-category-text").textContent = state.contextHint || (wait > 0 ? "Reveals in " + Math.floor(wait / 60) + ":" + String(wait % 60).padStart(2, "0") : "Revealing…");
+  }
   const remaining = state.endsAt ? Math.max(0, Math.ceil((state.endsAt - now) / 1000)) : 0;
   const reveal = state.phase === "finished";
   $("#context-clock").textContent = remaining >= 60 ? Math.floor(remaining / 60) + ":" + String(remaining % 60).padStart(2, "0") : String(remaining);

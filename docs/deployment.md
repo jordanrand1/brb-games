@@ -10,7 +10,7 @@ local tests.
 1. Push this repository to a GitHub repository. `.env`, `.data/`, databases,
    credentials and private screenshots must remain ignored. Keep the bundled
    `src/local-vectors.bin`, `src/local-vocab.json`, `src/semantic-model.json`,
-   the target list and `licenses/` in source.
+   the target list, `src/context-categories.json` and `licenses/` in source.
    Git has been initialized locally; create the first commit before pushing:
 
    ```sh

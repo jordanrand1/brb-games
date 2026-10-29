@@ -7,7 +7,7 @@ const descriptions = {
   wordle: "A shared five-letter word, six guesses each. Solve before the timer to survive.",
 };
 const instructions = {
-  context: "Type a word directly in Twitch chat. Known compounds like sand castle work too. Every guess is compared with the same secret. Solver earns 100 points, Biggest Leap 50, and Pathfinder 30. Useful new best guesses must gain at least one similarity point. With clutch time enabled, a five-point improvement in the final ten seconds adds five seconds, once per viewer and up to fifteen seconds per round.",
+  context: "Type a word directly in Twitch chat. Known compounds like sand castle work too. Every guess is compared with the same secret. With category hints enabled, a broad topic reveals halfway through the round. Solver earns 100 points, Biggest Leap 50, and Pathfinder 30. Useful new best guesses must gain at least one similarity point. With clutch time enabled, a five-point improvement in the final ten seconds adds five seconds, once per viewer and up to fifteen seconds per round.",
   krillion: "Submit one answer with !answer YOUR ANSWER. Scores reveal when the timer ends.",
   wordle: "Type !join, then !guess WORD. Each viewer has a personal board and up to six guesses.",
 };
@@ -17,6 +17,7 @@ if (!draft || typeof draft !== "object") draft = {};
 let selectedGame = gameNames[draft.mode] ? draft.mode : "context";
 let selectedDifficulty = ["easy", "normal", "hard"].includes(draft.difficulty) ? draft.difficulty : "easy";
 let clutchEnabled = draft.clutchEnabled !== false;
+let hintsEnabled = draft.hintsEnabled !== false;
 const durations = { context: 60, krillion: 30, wordle: 45 };
 for (const mode of Object.keys(durations)) {
   const choices = mode === "context" ? [30, 45, 60, 120, 180, 300] : [30, 45, 60];
@@ -47,7 +48,7 @@ function toast(message) {
 function saveDraft() {
   try {
     localStorage.setItem("brb-game-settings", JSON.stringify({
-      mode: selectedGame, durations, prompt: $("#krillion-prompt").value, difficulty: selectedDifficulty, clutchEnabled,
+      mode: selectedGame, durations, prompt: $("#krillion-prompt").value, difficulty: selectedDifficulty, clutchEnabled, hintsEnabled,
     }));
   } catch {}
 }
@@ -70,6 +71,7 @@ function renderEditor() {
   $("#game-description").textContent = descriptions[selectedGame];
   $("#context-difficulty").value = selectedDifficulty;
   $("#context-clutch").checked = clutchEnabled;
+  $("#context-hints").checked = hintsEnabled;
   const targetCount = latestState?.targetCounts?.[selectedDifficulty];
   const remaining = latestState?.contextNextDifficulty === selectedDifficulty ? latestState?.bagRemaining : null;
   $("#context-bag-note").textContent = (targetCount ? targetCount.toLocaleString() + " nouns. " : "") + (Number.isFinite(remaining) ? remaining + " left in this bag. " : "") + "Automatic picks do not repeat until this pool is used.";
@@ -91,7 +93,7 @@ function renderEditor() {
   $("#game-submit").disabled = busy || !controlsAllowed || selectedGame === "krillion" && !editing && !quota?.available;
   $("#krillion-quota").textContent = quota ? quota.available ? quota.dailyRemaining + " judged rounds left today · $" + Number(quota.monthlyRemainingUsd).toFixed(2) + " shared AI budget left this month." : quota.reason : "Connect Twitch to see your Krillion allowance.";
   $("#editor-note").textContent = editing
-    ? selectedGame === "context" ? "Timer and clutch changes apply now. Difficulty changes apply to the next word. Answers and progress are kept." : "Timer changes keep this round’s answers and progress. Time is measured from when the round began."
+    ? selectedGame === "context" ? "Timer, hint and clutch changes apply now. Difficulty changes apply to the next word. Answers and progress are kept." : "Timer changes keep this round’s answers and progress. Time is measured from when the round began."
     : startingFresh && latestState?.kind !== "idle"
       ? "Starting fresh resets the current game and its progress."
       : selectedGame === "context" ? "Each new round uses this time limit." : "";
@@ -120,6 +122,7 @@ function renderControl(state) {
     if (state.kind === "context") {
       selectedDifficulty = state.contextNextDifficulty || "easy";
       clutchEnabled = state.contextClutchEnabled !== false;
+      hintsEnabled = state.contextHintsEnabled !== false;
     }
     hydratedGame = true;
     saveDraft();
@@ -213,6 +216,7 @@ async function refreshConfig() {
         if (gameNames[settings.mode]) { selectedGame = settings.mode; durations[selectedGame] = settings.durationSeconds || durations[selectedGame]; }
         if (["easy", "normal", "hard"].includes(settings.difficulty)) selectedDifficulty = settings.difficulty;
         clutchEnabled = settings.clutchEnabled !== false;
+        hintsEnabled = settings.hintsEnabled !== false;
         if (typeof settings.prompt === "string") $("#krillion-prompt").value = settings.prompt;
         hydratedSettings = true;
       }
@@ -280,6 +284,7 @@ for (const mode of Object.keys(durations)) {
 $("#krillion-prompt").addEventListener("input", () => { editorDirty = true; saveDraft(); });
 $("#context-secret").addEventListener("input", () => { editorDirty = true; });
 $("#context-difficulty").addEventListener("change", (event) => { editorDirty = true; selectedDifficulty = event.target.value; saveDraft(); renderEditor(); });
+$("#context-hints").addEventListener("change", (event) => { editorDirty = true; hintsEnabled = event.target.checked; saveDraft(); renderEditor(); });
 $("#context-clutch").addEventListener("change", (event) => { editorDirty = true; clutchEnabled = event.target.checked; saveDraft(); renderEditor(); });
 $("#fresh-game").addEventListener("click", () => { startingFresh = !startingFresh; renderEditor(); });
 $("#game-form").addEventListener("submit", async (event) => {
@@ -287,9 +292,10 @@ $("#game-form").addEventListener("submit", async (event) => {
   if (busy || !controlsAllowed) return;
   const editing = canEditCurrent();
   const body = editing
-    ? { action: "configure", durationSeconds: durations[selectedGame], difficulty: selectedGame === "context" ? selectedDifficulty : undefined, clutchEnabled: selectedGame === "context" ? clutchEnabled : undefined }
+    ? { action: "configure", durationSeconds: durations[selectedGame], difficulty: selectedGame === "context" ? selectedDifficulty : undefined, clutchEnabled: selectedGame === "context" ? clutchEnabled : undefined, hintsEnabled: selectedGame === "context" ? hintsEnabled : undefined }
     : { action: selectedGame, durationSeconds: durations[selectedGame],
         difficulty: selectedGame === "context" ? selectedDifficulty : undefined, clutchEnabled: selectedGame === "context" ? clutchEnabled : undefined,
+        hintsEnabled: selectedGame === "context" ? hintsEnabled : undefined,
         secret: selectedGame === "context" ? $("#context-secret").value.trim() || undefined : undefined,
         prompt: selectedGame === "krillion" ? $("#krillion-prompt").value.trim() || undefined : undefined };
   busy = true;

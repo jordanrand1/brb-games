@@ -1,10 +1,10 @@
-import { contextWordPool, contextDifficultyPools, targetDifficulty, getWordRank, getWordSimilarity, isSupportedWord, lexicon, normalizeWord, wordleAnswers, wordleWords, semanticModel, contextPoolId, type ContextDifficulty } from "./embeddings.ts";
+import { contextWordPool, contextDifficultyPools, targetDifficulty, getWordRank, getWordSimilarity, isSupportedWord, lexicon, normalizeWord, wordleAnswers, wordleWords, semanticModel, contextPoolId, getContextCategory, type ContextDifficulty } from "./embeddings.ts";
 import { randomUUID } from "node:crypto";
 import { CommunityStore, addAward, type ContributionAward, type ContributorScore } from "./community-store.ts";
 
 export type GameKind = "idle" | "context" | "wordle" | "krillion";
 export type GuessEntry = { word: string; by: string; login?: string; rank: number; similarity?: number; at: number; improvement?: number; newBest?: boolean };
-type ContextOptions = { difficulty?: ContextDifficulty; clutchEnabled?: boolean };
+type ContextOptions = { difficulty?: ContextDifficulty; clutchEnabled?: boolean; hintsEnabled?: boolean };
 export type WordleAttempt = { word: string; colors: Array<"correct" | "present" | "absent">; at: number };
 export type WordlePlayer = { login: string; displayName: string; joinedAt: number; alive: boolean; solved: boolean; attempts: WordleAttempt[] };
 export type KrillionEntry = {
@@ -37,6 +37,8 @@ export type GameState = {
   contextDifficulty: ContextDifficulty;
   contextNextDifficulty: ContextDifficulty;
   contextClutchEnabled: boolean;
+  contextHintsEnabled: boolean;
+  contextHintRevealed: boolean;
   contextClutchSeconds: number;
   contextClutchUsers: string[];
   contextClutchEvent: { by: string; seconds: number; at: number } | null;
@@ -67,7 +69,8 @@ function freshState(): GameState {
     krillionPrompt: null, krillionAnswers: [], krillionJudged: false,
     contextStreak: 0, contextLevel: 1, contextLevelProgress: 0,
     contextRoundId: null, contextModelId: semanticModel.id, contextPoolId, contextDifficulty: "easy", contextNextDifficulty: "easy",
-    contextClutchEnabled: true, contextClutchSeconds: 0, contextClutchUsers: [], contextClutchEvent: null,
+    contextClutchEnabled: true, contextHintsEnabled: true, contextHintRevealed: false,
+    contextClutchSeconds: 0, contextClutchUsers: [], contextClutchEvent: null,
     contextAwards: [], contextSessionScores: [],
   };
 }
@@ -175,6 +178,7 @@ export class GameService {
       durationSeconds: duration, endsAt: Date.now() + duration * 1000,
       contextRoundId: randomUUID(), contextDifficulty: actualDifficulty, contextNextDifficulty: difficulty,
       contextClutchEnabled: options.clutchEnabled !== false,
+      contextHintsEnabled: options.hintsEnabled !== false,
       message: `Round 1: guess the word within ${duration} seconds.`,
     };
     this.emit();
@@ -248,6 +252,7 @@ export class GameService {
     if (state.kind === "context") {
       if (options.difficulty) state.contextNextDifficulty = options.difficulty;
       if (typeof options.clutchEnabled === "boolean") state.contextClutchEnabled = options.clutchEnabled;
+      if (typeof options.hintsEnabled === "boolean") state.contextHintsEnabled = options.hintsEnabled;
     }
     if (state.phase === "playing" && state.startedAt) state.endsAt = state.startedAt + durationSeconds * 1000 + (state.kind === "context" ? state.contextClutchSeconds * 1000 : 0);
     this.emit();
@@ -365,6 +370,12 @@ export class GameService {
   advanceIfDue(): void {
     if (this.pausedAt !== null) return;
     if (this.state.kind === "context") {
+      if (this.state.phase === "playing" && this.state.contextHintsEnabled && !this.state.contextHintRevealed
+        && this.state.startedAt !== null && Date.now() >= this.state.startedAt + this.state.durationSeconds * 500
+        && this.state.endsAt !== null && Date.now() < this.state.endsAt) {
+        this.state.contextHintRevealed = true;
+        this.emit();
+      }
       if (!this.state.endsAt || Date.now() < this.state.endsAt) return;
       if (this.state.phase === "playing") this.completeContextRound(null);
       else if (this.state.phase === "finished") this.startNextContextRound();
@@ -412,6 +423,8 @@ export class GameService {
       krillionAnswers: this.state.kind === "krillion" && this.state.phase === "round-complete" ? krillionAnswers : [],
       krillionAnswerCount: this.state.kind === "krillion" ? krillionAnswers.length : 0,
       target: this.state.phase === "finished" ? target : undefined, players,
+      contextHint: this.state.kind === "context" && this.state.phase === "playing" && this.state.contextHintsEnabled && this.state.contextHintRevealed && target ? getContextCategory(target) : null,
+      contextHintAt: this.state.kind === "context" && this.state.phase === "playing" && this.state.contextHintsEnabled && !this.state.contextHintRevealed && this.state.startedAt !== null ? this.state.startedAt + this.state.durationSeconds * 500 : null,
       semanticMode: this.semanticSimilarity ? "ai" : "local", semanticModel: this.semanticSimilarity ? null : semanticModel, supportedWords: lexicon.length,
       community: this.communityStore.summary(this.communityId),
       contextSessionScores: [...this.state.contextSessionScores].sort((a, b) => b.points - a.points || b.solves - a.solves || a.login.localeCompare(b.login)).slice(0, 5),
@@ -536,6 +549,7 @@ export class GameService {
     this.state.contextClutchSeconds = 0;
     this.state.contextClutchUsers = [];
     this.state.contextClutchEvent = null;
+    this.state.contextHintRevealed = false;
     this.state.startedAt = Date.now();
     this.state.endsAt = Date.now() + this.state.durationSeconds * 1000;
     this.state.message = `Round ${this.state.round}: ${this.state.durationSeconds} seconds. Chat level ${this.state.contextLevel} · ${this.state.contextLevelProgress}/3 wins to level up.`;

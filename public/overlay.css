@@ -46,6 +46,11 @@
 .hunt-direction { margin:0 2px 11px;color:#a59bd9;font:9px var(--mono);line-height:1.5; }
 .hunt-direction[data-heat="warm"] { color:#ffd083; }
 .hunt-direction[data-heat="hot"] { color:#ff8c7a; }
+.hunt-category { display:flex;align-items:center;justify-content:space-between;gap:14px;margin:0 0 16px;padding:12px 14px;border:1px solid #c0a4ff24;border-radius:11px;background:#c0a4ff08; }
+.hunt-category > span { color:#a99cbd;font:8px var(--mono);letter-spacing:.1em; }
+.hunt-category > strong { color:#b4a7c9;font:11px var(--display); }
+.hunt-category.hint-revealed { border-color:#c8f2a85c;background:#c8f2a80c; }
+.hunt-category.hint-revealed > strong { color:#d8ffb9;font-size:15px; }
 #context-card .overlay-guesses { display:grid;gap:7px;max-height:420px;overflow:hidden; }
 .hunt-guess { --heat:#aaa0e8; border:1px solid #ffffff07;border-radius:11px;background:#ffffff03;padding:10px 12px 12px; }
 .hunt-guess.heat-cold { --heat:#a59bd9; }

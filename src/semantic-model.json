@@ -8,5 +8,6 @@
   "license": "CC-BY-SA-4.0",
   "vectorSha256": "e52eacebe47551017ca6c88e68566a1a0eaca43ab3b1670f4ba81a0a6ccbce6c",
   "vocabSha256": "6ee61358bebb94ac93500f126af8ac35b79460f20621d721a510d525c864f934",
-  "targetSha256": "f86a267415ec130c218581ed68f9ce6a1ba3115a3c7778c14fd9caab408cb8e6"
+  "targetSha256": "f86a267415ec130c218581ed68f9ce6a1ba3115a3c7778c14fd9caab408cb8e6",
+  "categorySha256": "01c89154d60f862fba9e04c8f8f3754da8487698e33a95c1b0b2ea267fb1afe3"
 }

@@ -7,9 +7,27 @@ from pathlib import Path
 spec = importlib.util.spec_from_file_location("setup_vectors", Path(__file__).resolve().parents[1] / "scripts" / "setup-vectors.py")
 module = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(module)
+category_spec = importlib.util.spec_from_file_location("category_hints", Path(__file__).resolve().parents[1] / "scripts" / "category_hints.py")
+category_module = importlib.util.module_from_spec(category_spec)
+category_spec.loader.exec_module(category_module)
 
 
 class AnswerFilterTests(unittest.TestCase):
+    def test_category_ancestors_overrides_and_missing_coverage(self):
+        import json
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "wordnet.zip"
+            with zipfile.ZipFile(path, "w") as archive:
+                archive.writestr("wordnet/data.noun", "\n".join([
+                    "00000001 06 n 01 furniture 0 00 | furniture",
+                    "00000002 06 n 01 ottoman 0 01 @ 00000001 n 0000 | a seat",
+                ]))
+                archive.writestr("wordnet/index.sense", "furniture%1:06:00:: 00000001 1 3\nottoman%1:06:00:: 00000002 1 2\n")
+            data = json.loads(category_module.generate(path, {"easy": ["ottoman"], "normal": ["whiskey"], "hard": ["infield"]}))
+            self.assertEqual(data["categories"], {"infield": "Sports & games", "ottoman": "Home & furniture", "whiskey": "Food & drink"})
+            with self.assertRaisesRegex(RuntimeError, "reviewed category override"):
+                category_module.generate(path, {"easy": ["unknownword"], "normal": [], "hard": []})
+
     def test_reviewed_standard_pool_not_corpus_frequency_defines_difficulty(self):
         words = "tiger whiskey coffin pew infield bracing coping grinding toothpaste kitten".split()
         pools = module.partition_targets(words, set(words))

@@ -67,11 +67,15 @@ test("hosted OAuth, control authorization, channel SSE, refresh, rotation and de
   assert.equal((await app.call("/api/control", one.cookie, { action: "context", secret: "tiger", durationSeconds: 120 })).status, 200);
   assert.equal((await app.call("/api/control", two.cookie, { action: "context", secret: "tree" })).status, 200);
   const config1 = await (await app.call("/api/config", one.cookie)).json(), config2 = await (await app.call("/api/config", two.cookie)).json();
+  await app.call("/api/control", one.cookie, { action: "configure", durationSeconds: 120, hintsEnabled: false });
+  assert.equal((await (await app.call("/api/config", one.cookie)).json()).settings.hintsEnabled, false);
+  assert.equal((await (await app.call("/api/state?view=control", two.cookie)).json()).contextHintsEnabled, true);
   assert.notEqual(config1.overlayUrl, config2.overlayUrl); assert.equal(config1.aiSemanticRanking, false);
   const token1 = new URL(config1.overlayUrl).pathname.split("/").at(-1)!;
   const control1 = await app.stream(one.cookie), public1 = await app.stream("", token1);
   const first = await control1.next(), publicState = await public1.next();
   assert.equal(first.privateTarget, "tiger"); assert.equal(publicState.privateTarget, undefined); assert.equal(publicState.target, undefined);
+  assert.equal(publicState.contextHint, null); assert.equal(publicState.contextHintAt, null);
   await delay(40);
   app.send({ type: "chat", channel: "101", login: "outsider", text: "!stop" }); await delay(40);
   assert.equal((await (await app.call("/api/state?view=control", one.cookie)).json()).kind, "context");
@@ -81,6 +85,7 @@ test("hosted OAuth, control authorization, channel SSE, refresh, rotation and de
   control1.close(); public1.close();
   await app.restart();
   const restored = await (await app.call("/api/state?view=control", one.cookie)).json(); assert.equal(restored.paused, true); assert.equal(restored.winner, "solver"); assert.equal(restored.community.wins, 1);
+  assert.equal(restored.contextHintsEnabled, false);
   const refreshed = await app.stream(one.cookie); assert.equal((await refreshed.next()).paused, false); refreshed.close();
   await app.call("/api/overlay/rotate", one.cookie, {});
   assert.equal((await app.call("/api/state?source=" + token1)).status, 404);

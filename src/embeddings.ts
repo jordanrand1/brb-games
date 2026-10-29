@@ -81,7 +81,7 @@ for (const [name, words] of subgroups) {
 const pretrainedVectorsPath = new URL("./local-vectors.bin", import.meta.url);
 const pretrainedWordsPath = new URL("./local-vocab.json", import.meta.url);
 const modelPath = new URL("./semantic-model.json", import.meta.url);
-let model: { id: string; label: string; license?: string; vectorSha256?: string; vocabSha256?: string; targetSha256?: string; dimensions?: number; vocabularySize?: number } = { id: "seed-v1", label: "Starter word associations" };
+let model: { id: string; label: string; license?: string; vectorSha256?: string; vocabSha256?: string; targetSha256?: string; categorySha256?: string; dimensions?: number; vocabularySize?: number } = { id: "seed-v1", label: "Starter word associations" };
 if ([pretrainedVectorsPath, pretrainedWordsPath, modelPath].some(existsSync)) {
   if (![pretrainedVectorsPath, pretrainedWordsPath, modelPath].every(existsSync)) throw new Error("Local semantic data is incomplete. Run npm run setup:vectors.");
   model = JSON.parse(readFileSync(modelPath, "utf8"));
@@ -172,6 +172,12 @@ export const contextDifficultyPools: Record<ContextDifficulty, string[]> = Objec
     ? targetData[difficulty].filter((word: string) => vectors.has(word)) : [...fallbackTargets]])
 ) as Record<ContextDifficulty, string[]>;
 export const contextWordPool: string[] = [...new Set(Object.values(contextDifficultyPools).flat())];
+const categoriesPath = new URL("./context-categories.json", import.meta.url);
+const categoryBytes = existsSync(categoriesPath) ? readFileSync(categoriesPath) : null;
+if (model.categorySha256 && (!categoryBytes || createHash("sha256").update(categoryBytes).digest("hex") !== model.categorySha256)) throw new Error("Local category hints failed verification. Rebuild the category data.");
+const contextCategories: Record<string, string> = categoryBytes ? JSON.parse(categoryBytes.toString("utf8")).categories : {};
+if (model.categorySha256 && contextWordPool.some((word) => typeof contextCategories[word] !== "string" || !contextCategories[word])) throw new Error("An answer is missing its category hint. Rebuild the category data.");
+export function getContextCategory(word: string): string | null { return contextCategories[word] || null; }
 export function targetDifficulty(word: string): ContextDifficulty {
   return (["easy", "normal", "hard"] as const).find((difficulty) => contextDifficultyPools[difficulty].includes(word)) || "normal";
 }
