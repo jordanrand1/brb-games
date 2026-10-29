@@ -1,6 +1,6 @@
 const $ = (selector) => document.querySelector(selector);
 const $$ = (selector) => [...document.querySelectorAll(selector)];
-const gameNames = { context: "Semantic Hunt", krillion: "Krillion", wordle: "Wordle elimination" };
+const gameNames = { context: "Word Hunt", krillion: "Krillion", wordle: "Wordle elimination" };
 const descriptions = {
   context: "Chat guesses a secret noun. Each win builds the streak, then a new word starts automatically.",
   krillion: "One answer per viewer. When time runs out, AI scores relevance and originality.",
@@ -220,6 +220,7 @@ async function refreshConfig() {
     try {
       const config = await request("/api/config");
       latestConfig = config;
+      $("#signup-label").textContent = config.signupMode === "invite" ? "INVITE-ONLY BETA" : "PUBLIC BETA";
       quota = config.krillionQuota;
       if (!hydratedSettings && config.settings?.mode) {
         const settings = config.settings;
@@ -240,7 +241,7 @@ async function refreshConfig() {
       $("#source-placeholder").textContent = config.overlayUrl ? "TRANSPARENT OVERLAY" : "CONNECT TWITCH TO GET YOUR PERSONAL SOURCE";
       if (overlaySource !== config.overlayUrl) {
         overlaySource = config.overlayUrl;
-        $("#overlay-url").textContent = overlaySource || "Connect an invited Twitch account first.";
+        $("#overlay-url").textContent = overlaySource || "Connect Twitch to get your personal OBS URL.";
         $("#overlay-preview").src = overlaySource ? overlaySource + "?preview=1" : "about:blank";
         if (overlaySource) $(".overlay-link").href = overlaySource;
       }

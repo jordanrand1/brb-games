@@ -17,7 +17,7 @@ document.querySelector('#validate-judge').addEventListener('click', async (event
   try {
     document.querySelector('#validation-result').textContent = 'Checking relevance, duplicate answers, and instruction injection…';
     const response = await fetch('/api/operator/validate-judge', { method: 'POST' }), result = await response.json();
-    document.querySelector('#validation-result').textContent = !response.ok ? result.error : result.passed ? 'Validation passed. Krillion is enabled for invited channels.' : 'Validation failed. Krillion remains closed; review the judge before launch.';
+    document.querySelector('#validation-result').textContent = !response.ok ? result.error : result.passed ? 'Validation passed. Krillion is enabled for signed-in channels.' : 'Validation failed. Krillion remains closed; review the judge before launch.';
     refresh();
   } catch { document.querySelector('#validation-result').textContent = 'The validation connection was interrupted. Check operator status before retrying.'; }
   finally { event.target.disabled = false; }

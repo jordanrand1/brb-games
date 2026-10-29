@@ -1,12 +1,13 @@
 # BRB Arcade
 
 Twitch chat games for BRB screens and playing along with your community:
-Semantic Hunt, Wordle elimination, and Krillion. Streamers connect Twitch,
+Word Hunt, Wordle elimination, and Krillion. Streamers connect Twitch,
 configure a game, and copy a personal transparent OBS Browser Source URL.
 
-The hosted beta supports up to ten invited Twitch channels, each with independent
-controls, games, connections, records, settings and OBS URLs. One Node server
-and SQLite keep the deployment small; Semantic Hunt uses bundled commonsense word vectors
+Any streamer can sign in with Twitch. The hosted beta supports up to ten active
+Twitch channels at once, each with independent controls, games, connections,
+records, settings and OBS URLs. One Node server
+and SQLite keep the deployment small; Word Hunt uses bundled commonsense word vectors
 without per-guess API fees. Krillion has a durable $2 site-wide monthly ceiling,
 ten rounds per channel per UTC day, and an operator validation gate.
 
@@ -37,7 +38,7 @@ permissions require another Twitch sign-in.
 
 ## Chat games
 
-- **Semantic Hunt:** type a supported word directly in chat. Local cosine
+- **Word Hunt:** type a supported word directly in chat. Local cosine
   similarity and vocabulary rank show how close it is to the secret concrete
   noun. Timers: 30/45 seconds, 1/2/3/5 minutes. The word is revealed on a solve or
   timeout, followed by a new round after eight seconds. Consecutive wins build
@@ -52,11 +53,12 @@ permissions require another Twitch sign-in.
   novelty. Exact duplicates get zero novelty. Provider failures preserve answers;
   explicit retries are budgeted, and uncertain requests cannot be resent.
 
-Broadcaster/moderator chat controls: `!game context`, `!game wordle`,
+Broadcaster/moderator chat controls: `!game wordhunt` (or `!game hunt`), `!game wordle`,
 `!game krillion [optional question]`, `!stop`. Roles and broadcaster identity
 come from authenticated Twitch EventSub events and are checked server-side.
+The older `!game context` command remains supported.
 
-Semantic Hunt **always** uses local vectors, even with `OPENAI_API_KEY` configured.
+Word Hunt **always** uses local vectors, even with `OPENAI_API_KEY` configured.
 The installed vocabulary contains 30,000 guess words and 2,302 target nouns:
 481 Easy, 852 Standard and 969 Expert. Easy is the default for new setups;
 saved difficulty choices are retained. Easy and Standard use explicit reviewed
@@ -78,7 +80,13 @@ timer edits and resets when the next word starts.
 
 ## Host and operate
 
-Follow [docs/deployment.md](docs/deployment.md) for Render, invitations, Twitch
+Public signup is the default, even when an old invitation list is configured.
+`OWNER_TWITCH_USER_ID` still identifies the only account allowed to use operational
+controls. To close signups again, set `SIGNUP_MODE=invite` and include that owner
+in `ALLOWED_TWITCH_USER_IDS`. Sign-in does not bypass the ten-active-channel
+capacity limit; accounts can sign in while full and play when a slot opens.
+
+Follow [docs/deployment.md](docs/deployment.md) for Render, access modes, Twitch
 OAuth, capped AI, R2 backups, release checks and rollback. The starting budget
 is $7 compute + $0.25 disk + up to $2 AI, before taxes and bandwidth overages.
 [docs/storage.md](docs/storage.md) explains migration, encryption, retention,

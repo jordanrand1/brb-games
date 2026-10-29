@@ -26,15 +26,19 @@ const callback = origin + "/auth/callback";
 const directory = process.env.BRB_DATA_DIR || join(root, ".data");
 const invited = new Set((process.env.ALLOWED_TWITCH_USER_IDS || "").split(",").map((id) => id.trim()).filter(Boolean));
 const owner = process.env.OWNER_TWITCH_USER_ID || "";
+// Public beta is the default; operators can explicitly restore invitations.
+const signupMode = process.env.SIGNUP_MODE || "public";
+if (!["public", "invite"].includes(signupMode)) throw new Error("SIGNUP_MODE must be public or invite.");
+const publicSignups = signupMode === "public";
 if (invited.size > 10 || [...invited].some((id) => !/^\d+$/.test(id))) throw new Error("Configure at most ten numeric invited Twitch user IDs.");
-if (production && (!configured || !origin.startsWith("https://") || !invited.size || !invited.has(owner) || (process.env.SESSION_SECRET || "").length < 32 || (process.env.ENCRYPTION_KEY || "").length < 32)) {
-  throw new Error("Production requires Twitch credentials, an HTTPS PUBLIC_BASE_URL, up to ten invited user IDs including OWNER_TWITCH_USER_ID, and separate SESSION_SECRET / ENCRYPTION_KEY values of at least 32 characters.");
+if (production && (!configured || !origin.startsWith("https://") || !/^\d+$/.test(owner) || (!publicSignups && !invited.has(owner)) || (process.env.SESSION_SECRET || "").length < 32 || (process.env.ENCRYPTION_KEY || "").length < 32)) {
+  throw new Error("Production requires Twitch credentials, an HTTPS PUBLIC_BASE_URL, a numeric OWNER_TWITCH_USER_ID, and separate SESSION_SECRET / ENCRYPTION_KEY values of at least 32 characters. Invite mode also requires the owner in ALLOWED_TWITCH_USER_IDS.");
 }
 mkdirSync(directory, { recursive: true, mode: 0o700 });
 const keyPath = join(directory, "session-secret");
 const secret = process.env.SESSION_SECRET || (existsSync(keyPath) ? readFileSync(keyPath, "utf8").trim() : randomBytes(32).toString("hex"));
 if (!process.env.SESSION_SECRET) { writeFileSync(keyPath, secret, { mode: 0o600 }); chmodSync(keyPath, 0o600); }
-const allowed = (id: string) => id === "local-demo" ? !configured && !production : invited.size ? invited.has(id) : !production;
+const allowed = (id: string) => id === "local-demo" ? !configured && !production : /^\d+$/.test(id) && (publicSignups || invited.has(id) || (!production && !invited.size));
 const monthlyLimit = Math.min(2, Math.max(0, Number(process.env.AI_MONTHLY_BUDGET_USD ?? 2)));
 if (!Number.isFinite(monthlyLimit)) throw new Error("AI_MONTHLY_BUDGET_USD must be a number from 0 to 2.");
 const database = new AppDatabase(directory, process.env.ENCRYPTION_KEY || secret, clientId, monthlyLimit);
@@ -62,7 +66,7 @@ function accountFrom(req: any): Account | null {
 function requireAccount(req: any): Account | null {
   if (!configured && !production) return null;
   const account = accountFrom(req);
-  if (!account) throw new HttpError(401, "Sign in with an invited broadcaster account to continue.");
+  if (!account) throw new HttpError(401, publicSignups ? "Sign in with Twitch to continue." : "Sign in with an invited broadcaster account to continue.");
   return account;
 }
 function roomFor(req: any): Room { const account = requireAccount(req); return rooms.get(account?.id || "local-demo", account); }
@@ -95,9 +99,10 @@ function config(account: Account | null): Record<string, unknown> {
   const capacity = !room && rooms.rooms.size >= 10;
   return {
     twitchConfigured: configured, twitchAuthenticated: Boolean(account), twitchConnected: room?.connection?.status === "Connected",
+    signupMode, maxActiveChannels: 10,
     channel: account?.name || null, login: account?.login || null, aiSemanticRanking: false,
     status: capacity ? "Beta at capacity" : configured ? account ? room?.connection?.status || "Paused" : "Not connected" : "Local demo",
-    message: capacity ? "All ten beta channels are active. Try again when another channel pauses." : configured ? account ? room?.connection?.message || "Open the browser source to resume your saved game." : "Invite-only beta: connect an invited broadcaster account, then add your OBS source." : "Local demo. Configure Twitch when you are ready to connect chat.",
+    message: capacity ? "All ten beta channels are active. Try playing again when another channel pauses." : configured ? account ? room?.connection?.message || "Open the browser source to resume your saved game." : publicSignups ? "Connect Twitch to play with your community, then copy your personal OBS source. Up to ten channels can play at once." : "Invite-only beta: connect an invited broadcaster account, then add your OBS source." : "Local demo. Configure Twitch when you are ready to connect chat.",
     overlayUrl: account || !configured ? overlayUrl(account) : null, settings: account?.settings || {},
     krillionQuota: account || !configured ? rooms.quota(account?.id || "local-demo") : null,
     isOwner: Boolean(account && owner && account.id === owner), redirectUri: callback,
@@ -120,7 +125,8 @@ async function oauthCallback(req: any, res: any, url: URL): Promise<void> {
   const userResponse = await fetch("https://api.twitch.tv/helix/users", { headers: { "Client-Id": clientId, Authorization: `Bearer ${token.access_token}` }, signal: AbortSignal.timeout(15_000) });
   if (!userResponse.ok) throw new HttpError(502, "Twitch could not identify the signed-in account.");
   const user = (await userResponse.json() as any).data?.[0];
-  if (!user?.id || !user.login || !allowed(user.id)) {
+  if (!user?.id || !/^\d+$/.test(user.id) || !user.login) throw new HttpError(502, "Twitch could not identify the signed-in account.");
+  if (!allowed(user.id)) {
     await revoke({ accessToken: token.access_token } as TwitchSession);
     redirect(res, "/?notice=invite-required"); return;
   }
@@ -259,7 +265,7 @@ const server = createServer(async (req, res) => {
   }
 });
 server.requestTimeout = 15_000; server.headersTimeout = 10_000; server.maxHeadersCount = 50;
-server.listen(port, process.env.HOST || (production ? "0.0.0.0" : "127.0.0.1"), () => console.log(`[server] BRB Arcade listening on port ${port}. ${production ? "Invite-only hosted beta." : "Local mode."}`));
+server.listen(port, process.env.HOST || (production ? "0.0.0.0" : "127.0.0.1"), () => console.log(`[server] BRB Arcade listening on port ${port}. ${production ? publicSignups ? "Public hosted beta." : "Invite-only hosted beta." : "Local mode."}`));
 const cleanup = setInterval(() => {
   const now = Date.now();
   for (const [id, expiry] of oauthStates) if (expiry < now) oauthStates.delete(id);

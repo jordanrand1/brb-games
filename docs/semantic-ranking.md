@@ -1,6 +1,6 @@
-# Semantic Hunt scoring
+# Word Hunt scoring
 
-Semantic Hunt compares every guess against the same secret using local
+Word Hunt compares every guess against the same secret using local
 ConceptNet Numberbatch 19.08 vectors. Numberbatch includes commonsense graph
 relationships in addition to text-trained embeddings. It requires no paid
 per-guess request and is independent of OPENAI_API_KEY, which only enables

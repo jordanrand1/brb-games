@@ -9,12 +9,12 @@ import { once } from "node:events";
 const root = new URL("..", import.meta.url).pathname;
 const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
-async function fixture(t: any) {
+async function fixture(t: any, access: { signupMode?: string; invitedIds?: string } = {}) {
   const directory = mkdtempSync(join(tmpdir(), "brb-http-"));
   const probe = createServer(); probe.listen(0, "127.0.0.1"); await once(probe, "listening"); const port = (probe.address() as any).port; await new Promise<void>((resolve) => probe.close(() => resolve()));
   const address = "http://127.0.0.1:" + port, origin = "https://beta.example.test";
   let child: ChildProcess;
-  const env = { ...process.env, BRB_SKIP_ENV_FILE: "1", BRB_DATA_DIR: directory, NODE_ENV: "production", HOST: "127.0.0.1", PORT: String(port), PUBLIC_BASE_URL: origin, TWITCH_CLIENT_ID: "test-client", TWITCH_CLIENT_SECRET: "test-secret", ALLOWED_TWITCH_USER_IDS: "101,202", OWNER_TWITCH_USER_ID: "101", SESSION_SECRET: "test-cookie-".repeat(5), ENCRYPTION_KEY: "test-encryption-".repeat(4), OPENAI_API_KEY: "", R2_ACCOUNT_ID: "", R2_BUCKET: "", R2_ACCESS_KEY_ID: "", R2_SECRET_ACCESS_KEY: "" };
+  const env = { ...process.env, BRB_SKIP_ENV_FILE: "1", BRB_DATA_DIR: directory, NODE_ENV: "production", HOST: "127.0.0.1", PORT: String(port), PUBLIC_BASE_URL: origin, TWITCH_CLIENT_ID: "test-client", TWITCH_CLIENT_SECRET: "test-secret", SIGNUP_MODE: access.signupMode ?? "invite", ALLOWED_TWITCH_USER_IDS: access.invitedIds ?? "101,202", OWNER_TWITCH_USER_ID: "101", SESSION_SECRET: "test-cookie-".repeat(5), ENCRYPTION_KEY: "test-encryption-".repeat(4), OPENAI_API_KEY: "", R2_ACCOUNT_ID: "", R2_BUCKET: "", R2_ACCESS_KEY_ID: "", R2_SECRET_ACCESS_KEY: "" };
   async function start() {
     let output = "";
     child = spawn(process.execPath, ["--experimental-sqlite", "--experimental-strip-types", "--import", "./test/helpers/twitch-preload.ts", "src/server.ts"], { cwd: root, env, stdio: ["ignore", "pipe", "pipe", "ipc"] });
@@ -100,3 +100,36 @@ test("hosted OAuth, control authorization, channel SSE, refresh, rotation and de
   await app.call("/auth/logout", two.cookie, {});
   assert.equal((await app.call("/api/state?view=control", two.cookie)).status, 401);
 });
+
+for (const access of [{ signupMode: "", invitedIds: "" }, { signupMode: "public", invitedIds: "101,202" }]) {
+  test(`public Twitch signup isolates new channels and preserves owner access (${access.invitedIds ? "legacy allowlist" : "default without invitations"})`, { timeout: 20_000 }, async (t) => {
+    const app = await fixture(t, access);
+    const before = await (await app.call("/api/config")).json();
+    assert.equal(before.signupMode, "public");
+    assert.equal(before.maxActiveChannels, 10);
+    assert.equal(before.aiSemanticRanking, false);
+    assert.equal((await app.call("/api/control", "", { action: "context" })).status, 401);
+    const one = await app.login("303"), two = await app.login("404"), owner = await app.login("101");
+    assert.match(one.response.headers.get("location")!, /connected=1/);
+    assert.ok(one.cookie); assert.ok(two.cookie); assert.ok(owner.cookie);
+    assert.equal((await app.call("/api/operator/status", one.cookie)).status, 403);
+    assert.equal((await app.call("/api/operator/status", owner.cookie)).status, 200);
+    assert.equal((await app.call("/api/demo/chat", one.cookie, { text: "tiger" })).status, 403);
+    assert.equal((await app.call("/api/control", one.cookie, { action: "context", secret: "tiger", channelId: "404" })).status, 200);
+    assert.equal((await app.call("/api/control", two.cookie, { action: "context", secret: "tree" })).status, 200);
+    const stateOne = await (await app.call("/api/state?view=control&channel=404", one.cookie)).json();
+    const stateTwo = await (await app.call("/api/state?view=control", two.cookie)).json();
+    assert.equal(stateOne.privateTarget, "tiger"); assert.equal(stateTwo.privateTarget, "tree");
+    const configOne = await (await app.call("/api/config", one.cookie)).json();
+    const configTwo = await (await app.call("/api/config", two.cookie)).json();
+    assert.notEqual(configOne.overlayUrl, configTwo.overlayUrl);
+    assert.equal(configOne.isOwner, false); assert.equal(configTwo.isOwner, false);
+    await app.restart();
+    assert.equal((await (await app.call("/api/state?view=control", one.cookie)).json()).privateTarget, "tiger");
+    assert.equal((await (await app.call("/api/state?view=control", two.cookie)).json()).privateTarget, "tree");
+    const page = await (await app.call("/")).text();
+    assert.ok(page.includes("Word Hunt")); assert.ok(!page.includes("Semantic Hunt"));
+    const overlay = await (await app.call(new URL(configOne.overlayUrl).pathname)).text();
+    assert.ok(overlay.includes("WORD HUNT"));
+  });
+}

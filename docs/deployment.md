@@ -1,4 +1,4 @@
-# Deploy the invite-only beta
+# Deploy the Twitch games beta
 
 The repository contains the app and deployment configuration. The operator still
 needs GitHub, Render, Cloudflare R2 and a Twitch application. Streamers only need
@@ -30,15 +30,18 @@ local tests.
    URL, without a path. Register exactly
    `https://YOUR-SERVICE.onrender.com/auth/callback` in the Twitch developer
    console. Local and hosted callbacks can coexist in the same application.
-4. Set `TWITCH_CLIENT_ID` and `TWITCH_CLIENT_SECRET`. Set
-   `ALLOWED_TWITCH_USER_IDS` to at most ten comma-separated **numeric user IDs**,
-   not logins, and `OWNER_TWITCH_USER_ID` to your ID from that list. With the app's
-   credentials in your local `.env`, run `npm run twitch:ids -- your_login invited_login`.
+4. Set `TWITCH_CLIENT_ID`, `TWITCH_CLIENT_SECRET`, and `OWNER_TWITCH_USER_ID` to
+   your **numeric Twitch user ID**, not your login. `SIGNUP_MODE=public` is the
+   default: any streamer can sign in and gets independent games and a personal
+   OBS URL. There is still a maximum of ten active channels. Signups do not
+   increase that limit or the AI spending cap. With the app's
+   credentials in your local `.env`, run `npm run twitch:ids -- your_login`.
    It uses Twitch's official API and prints only logins and IDs. Never paste
    tokens into third-party tools.
-   Production fails closed if the invitation list, owner, Twitch credentials or
-   HTTPS URL are missing. Local development permits existing Twitch use when no
-   invitation list is configured.
+   Production fails closed if the owner, Twitch credentials, HTTPS URL or secure
+   secrets are missing. To switch back to invitations, set `SIGNUP_MODE=invite`
+   and `ALLOWED_TWITCH_USER_IDS` to at most ten comma-separated numeric IDs,
+   including the owner. In public mode the old allowlist does not restrict signup.
 5. Render generates separate `SESSION_SECRET` and `ENCRYPTION_KEY` values. Save
    them privately outside the service. Do not replace ENCRYPTION_KEY on a deploy.
 6. Create a private R2 **Standard** bucket. Add an object lifecycle rule expiring
@@ -46,7 +49,7 @@ local tests.
    Write API token to the app via `R2_ACCOUNT_ID`, `R2_BUCKET`,
    `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`. Do not enable public access.
 7. Set a funded `OPENAI_API_KEY`, `OPENAI_JUDGE_MODEL=gpt-6-luna`, and
-   `AI_MONTHLY_BUDGET_USD=2` (or a smaller value). Semantic Hunt always uses local
+   `AI_MONTHLY_BUDGET_USD=2` (or a smaller value). Word Hunt always uses local
    commonsense vectors; this key enables only capped Krillion judging. Models other than
    the audited judge are rejected. Provider billing alerts are additional to,
    and do not replace, the application's transaction-based spending limit.

@@ -161,7 +161,7 @@ export class Rooms {
       const settings = this.database.getAccount(room.id)?.settings || {};
       const durations = settings.durations as Record<string, number> || {};
       if (action === "stop" || argument.toLowerCase() === "stop") room.game.stop();
-      else if (argument.toLowerCase() === "context") room.game.startContext(undefined, durations.context || 60, settings);
+      else if (["context", "hunt", "wordhunt", "word hunt"].includes(argument.toLowerCase())) room.game.startContext(undefined, durations.context || 60, settings);
       else if (argument.toLowerCase() === "wordle") room.game.startWordle(durations.wordle || 45);
       else if (/^krillion(?:\s|$)/i.test(argument)) { this.requireQuota(room.id); room.game.startKrillion(durations.krillion || 30, argument.slice(8).trim() || undefined); }
     }

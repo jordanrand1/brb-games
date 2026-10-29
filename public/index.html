@@ -20,7 +20,7 @@
 
     <main>
       <div class="dashboard-heading">
-        <div><span class="eyebrow">YOUR COMMUNITY’S PLAYGROUND · INVITE-ONLY BETA</span><h1>Stream dashboard</h1><p>1. Connect Twitch → 2. Configure a game → 3. Copy your OBS source.</p></div>
+        <div><span class="eyebrow">YOUR COMMUNITY’S PLAYGROUND · <span id="signup-label">BETA</span></span><h1>Stream dashboard</h1><p>1. Connect Twitch → 2. Configure a game → 3. Copy your OBS source.</p></div>
       </div>
 
       <div class="dashboard-grid">
@@ -42,7 +42,7 @@
           <form id="game-form">
             <label class="field-label" for="game-mode">Game</label>
             <select id="game-mode" class="text-field">
-              <option value="context">◉ Semantic Hunt</option>
+              <option value="context">◉ Word Hunt</option>
               <option value="krillion">✳ Krillion</option>
               <option value="wordle">▦ Wordle elimination</option>
             </select>
@@ -54,7 +54,7 @@
               <p id="context-bag-note" class="field-help">Words come from a shuffled bag with no repeats until the pool is used.</p>
               <p id="context-model-note" class="field-help">Commonsense word associations · rank #1 is the answer.</p>
               <label class="field-label">Round timer</label>
-              <div class="timer-options" id="context-duration" role="group" aria-label="Semantic Hunt round timer">
+              <div class="timer-options" id="context-duration" role="group" aria-label="Word Hunt round timer">
                 <button type="button" data-seconds="30">30 sec</button><button type="button" data-seconds="45">45 sec</button><button type="button" data-seconds="60" class="selected">1 min</button><button type="button" data-seconds="120">2 min</button><button type="button" data-seconds="180">3 min</button><button type="button" data-seconds="300">5 min</button>
               </div>
               <label class="toggle-setting" for="context-clutch"><span><strong>Clutch time</strong><small>A big improvement near zero earns +5 seconds. Up to +15 seconds per round.</small></span><input id="context-clutch" type="checkbox" checked></label>

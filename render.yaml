@@ -19,6 +19,8 @@ services:
         sync: false
       - key: TWITCH_CLIENT_SECRET
         sync: false
+      - key: SIGNUP_MODE
+        value: public
       - key: ALLOWED_TWITCH_USER_IDS
         sync: false
       - key: OWNER_TWITCH_USER_ID
