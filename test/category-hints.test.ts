@@ -94,3 +94,66 @@ test("the answer reveal and the next round clear the old category; disabled hint
   assert.equal(game.state.contextHintsEnabled, false);
   assert.equal(game.publicState().contextHintAt, null);
 });
+
+test("Start reveals immediately on the first and subsequent rounds, while disabled hints stay private", (t) => {
+  const { game, at } = fixture(t);
+  game.startContext("tiger", 60, { hintTiming: "start" });
+  assert.equal(game.publicState().contextHint, "Animals & wildlife");
+  assert.equal(game.publicState().contextHintAt, null);
+  game.chatGuess("solver", "Solver", "tiger");
+  at(8_000);
+  assert.equal(game.state.round, 2);
+  assert.ok(game.publicState().contextHint);
+  game.startContext("tiger", 60, { hintTiming: "start", hintsEnabled: false });
+  assert.equal(game.publicState().contextHint, null);
+  game.updateDuration(60, { hintsEnabled: true });
+  assert.equal(game.publicState().contextHint, "Animals & wildlife");
+});
+
+test("End reveals at the start of the final quarter for every supported duration", (t) => {
+  const { game, at } = fixture(t);
+  for (const duration of [30, 45, 60, 120, 180, 300]) {
+    at(0);
+    game.startContext("whiskey", duration, { hintTiming: "end" });
+    const revealMs = duration * 750;
+    assert.equal(game.publicState().contextHintAt, Date.now() + revealMs);
+    at(revealMs - 1); assert.equal(game.publicState().contextHint, null);
+    at(revealMs); assert.equal(game.publicState().contextHint, "Food & drink");
+    assert.equal(game.state.phase, "playing");
+    game.stop();
+  }
+});
+
+test("timing edits move unrevealed hints and keep revealed hints visible; invalid choices do not change the game", (t) => {
+  const { game, at } = fixture(t);
+  game.startContext("tiger", 60);
+  at(20_000); game.updateDuration(60, { hintTiming: "end" });
+  assert.equal(game.publicState().contextHintAt, 1_800_000_045_000);
+  at(30_000); assert.equal(game.publicState().contextHint, null);
+  game.updateDuration(60, { hintTiming: "start" });
+  assert.equal(game.publicState().contextHint, "Animals & wildlife");
+  game.updateDuration(60, { hintTiming: "end" });
+  assert.equal(game.publicState().contextHint, "Animals & wildlife");
+  const before = structuredClone(game.state);
+  assert.throws(() => game.updateDuration(120, { hintTiming: "tomorrow" as any }), /hint timing/);
+  assert.deepEqual(game.state, before);
+  assert.throws(() => game.startContext("tree", 120, { hintTiming: "constructor" as any }), /hint timing/);
+  assert.deepEqual(game.state, before);
+});
+
+test("End timing survives restart and pause, and older snapshots keep the Middle default", (t) => {
+  const { game, at } = fixture(t);
+  game.startContext("tiger", 60, { hintTiming: "end" });
+  at(20_000); game.pause();
+  const snapshot = structuredClone(game.checkpoint()) as any;
+  const restored = new GameService(); t.after(() => restored.dispose());
+  restored.restore(snapshot);
+  at(200_000); restored.resume();
+  assert.equal(restored.state.contextHintTiming, "end");
+  assert.equal(restored.publicState().contextHintAt, Date.now() + 25_000);
+  at(224_999); restored.advanceIfDue(); assert.equal(restored.publicState().contextHint, null);
+  at(225_000); restored.advanceIfDue(); assert.equal(restored.publicState().contextHint, "Animals & wildlife");
+  delete snapshot.state.contextHintTiming;
+  restored.restore(snapshot);
+  assert.equal(restored.state.contextHintTiming, "middle");
+});

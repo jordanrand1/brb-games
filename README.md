@@ -70,8 +70,9 @@ is distributed under CC BY-SA 4.0 with attribution in
 [licenses/WORDNET.txt](licenses/WORDNET.txt).
 
 Category hints are enabled by default and can be toggled in the dashboard. A
-broad topic reveals halfway through the configured round (30 seconds into a
-one-minute round), with no API request. Pauses freeze the reveal countdown;
+broad topic reveals at **Start** (immediately), **Middle** (50%), or **End**
+(75% through, leaving the final quarter to use it), with no API request.
+Middle remains the default for existing games. Pauses freeze the reveal countdown;
 refreshes and restarts preserve it. Once shown, a hint stays revealed through
 timer edits and resets when the next word starts.
 

@@ -86,12 +86,16 @@ hash is pinned in the model manifest and every answer must have a category.
 Regenerate it with `python3 scripts/category_hints.py --wordnet-zip PATH` after
 editing category overrides. A full vector rebuild also generates categories.
 
-The optional hint appears halfway through the configured duration, independently
-of guess warmth. The server withholds the category from public state until reveal.
+The optional hint can appear at Start (immediately), Middle (50% through), or End
+(75% through, leaving the final quarter for guesses), independently of guess
+warmth. Middle is the default, including snapshots without a timing setting.
+Start also reveals immediately on each subsequent round. Timing is saved per
+channel and follows broadcaster/moderator game restarts from chat.
+The server withholds the category from public state until reveal.
 The public deadline drives the browser countdown, while the server's tick reveals
 and checkpoints it. Pausing freezes that deadline; resuming shifts it with the
 round timer. Clutch time leaves it unchanged. A duration edit before reveal moves
-halfway, while an already revealed hint remains revealed. Disabling hints hides
+the reveal time, while an already revealed hint remains revealed. Disabling hints hides
 them immediately. Each new word resets the reveal flag. Existing snapshots gain
 enabled hints by default without losing their current guesses.
 
