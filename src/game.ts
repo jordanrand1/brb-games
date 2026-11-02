@@ -457,6 +457,7 @@ export class GameService {
       contextGuessCount: this.state.contextGuesses.length,
       contextPlayerCount: new Set(this.state.contextGuesses.map((guess) => guess.login)).size,
       contextGuesses: this.state.contextGuesses.slice(0, 20),
+      contextRecentGuesses: [...this.state.contextGuesses].sort((a, b) => a.at - b.at).slice(-12).reverse(),
       contextVote: contextVote ? { endsAt: contextVote.endsAt, options: contextVote.options, totalVotes: Object.keys(contextVote.ballots).length } : null,
       contextMarathonClockMs: this.state.contextMode === "marathon" && this.state.phase === "playing" ? Math.max(0, (this.state.endsAt || 0) - (this.pausedAt ?? Date.now())) : this.state.contextMarathonRemainingMs,
       krillionAnswers: this.state.kind === "krillion" && this.state.phase === "round-complete" ? krillionAnswers : [],

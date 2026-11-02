@@ -103,7 +103,7 @@ function config(account: Account | null): Record<string, unknown> {
     chatWriteGranted: account?.credentials?.scopes?.includes("user:write:chat") === true,
     channel: account?.name || null, login: account?.login || null, aiSemanticRanking: false,
     status: capacity ? "Beta at capacity" : configured ? account ? room?.connection?.status || "Paused" : "Not connected" : "Local demo",
-    message: capacity ? "All ten beta channels are active. Try playing again when another channel pauses." : configured ? account ? room?.connection?.message || "Open the browser source to resume your saved game." : publicSignups ? "Connect Twitch to play with your community, then copy your personal OBS source. Up to ten channels can play at once." : "Invite-only beta: connect an invited broadcaster account, then add your OBS source." : "Local demo. Configure Twitch when you are ready to connect chat.",
+    message: capacity ? "All ten beta channels are active. Try playing again when another channel pauses." : configured ? account ? room?.connection?.message || "Your saved game resumes when you open the arcade." : publicSignups ? "Connect Twitch to start a game with chat. Play here or add your game to OBS. Up to ten channels can play at once." : "Invite-only beta: connect an invited broadcaster account to start playing." : "Local demo. Configure Twitch when you are ready to connect chat.",
     overlayUrl: account || !configured ? overlayUrl(account) : null, settings: account?.settings || {},
     krillionQuota: account || !configured ? rooms.quota(account?.id || "local-demo") : null,
     isOwner: Boolean(account && owner && account.id === owner), redirectUri: callback,
@@ -138,7 +138,7 @@ async function oauthCallback(req: any, res: any, url: URL): Promise<void> {
   redirect(res, "/?connected=1");
 }
 
-const staticFiles: Record<string, string> = { "/": "index.html", "/overlay": "overlay.html", "/app.js": "app.js", "/app.css": "app.css", "/overlay.js": "overlay.js", "/overlay.css": "overlay.css", "/privacy": "privacy.html", "/operator": "operator.html", "/operator.js": "operator.js" };
+const staticFiles: Record<string, string> = { "/": "index.html", "/overlay": "overlay.html", "/app.js": "app.js", "/app.css": "app.css", "/overlay.js": "overlay.js", "/overlay.css": "overlay.css", "/stage.css": "stage.css", "/privacy": "privacy.html", "/operator": "operator.html", "/operator.js": "operator.js" };
 const mime: Record<string, string> = { ".html": "text/html; charset=utf-8", ".css": "text/css; charset=utf-8", ".js": "text/javascript; charset=utf-8" };
 function staticFile(res: any, path: string): void {
   const file = staticFiles[path];
@@ -208,13 +208,14 @@ const server = createServer(async (req, res) => {
     if (req.method === "GET" && ["/api/state", "/api/events"].includes(url.pathname)) {
       rate(req, "state", 180);
       const view = url.searchParams.get("view") === "control" ? "control" : "public";
-      const account = view === "control" ? requireAccount(req) : overlayAccount(url.searchParams.get("source"));
+      const signedView = view === "control" || url.searchParams.get("view") === "stage";
+      const account = signedView ? requireAccount(req) : overlayAccount(url.searchParams.get("source"));
       const room = rooms.get(account?.id || "local-demo", account);
       if (url.pathname === "/api/state") { json(res, 200, rooms.state(room, view)); return; }
       const limit = view === "control" ? 3 : 4;
       if ([...room.clients].filter((client) => client.view === view).length >= limit) throw new HttpError(429, "Too many open dashboard or OBS sources for this channel.");
       res.writeHead(200, { "Content-Type": "text/event-stream; charset=utf-8", Connection: "keep-alive", "X-Accel-Buffering": "no" });
-      rooms.attach(room, { response: res, view, sessionId: view === "control" ? sessionId(req) || undefined : undefined }); return;
+      rooms.attach(room, { response: res, view, sessionId: signedView ? sessionId(req) || undefined : undefined }); return;
     }
     if (req.method === "POST" && url.pathname === "/api/control") {
       const room = roomFor(req);
@@ -265,6 +266,10 @@ const server = createServer(async (req, res) => {
         catch { throw new HttpError(502, "AI validation could not complete. Check provider credits and the operator budget status."); }
         return;
       }
+    }
+    if (req.method === "GET" && url.pathname === "/play") {
+      if (configured && !accountFrom(req)) { redirect(res, "/?notice=connect-required"); return; }
+      staticFile(res, "/overlay"); return;
     }
     if (req.method === "GET" && url.pathname.startsWith("/overlay/")) { overlayAccount(url.pathname.slice(9)); staticFile(res, "/overlay"); return; }
     if (req.method === "GET") { if (url.pathname === "/overlay" && configured) throw new HttpError(404, "Copy your personal OBS URL from the dashboard."); staticFile(res, url.pathname); return; }

@@ -28,7 +28,14 @@ simulation is disabled; sign in with the broadcaster account. Configure
 `PUBLIC_BASE_URL` and register its `/auth/callback` path in your Twitch app.
 See [.env.example](.env.example) for server-only configuration.
 
-The dashboard has one setup/edit card and one embedded OBS source preview.
+The website starts with a Twitch connection screen. After sign-in, the live game
+is the main view. **New game**, **Edit game** and **Stop game** are separate
+actions; optional settings live under **More options**. Full screen and the
+signed-in `/play` pop-out show a larger board with recent accepted guesses
+alongside the closest guesses. **Add to OBS** provides the existing transparent
+Browser Source URL; OBS is optional for playing on the website. Signed-out
+visitors cannot access game controls. The no-credentials local development
+simulator remains available for development.
 Refresh reconnects to the current round. Scores, word bags, settings, browser
 sessions, encrypted Twitch credentials and active games persist in SQLite.
 After five minutes without a dashboard or source, the channel pauses. Reopening
@@ -75,7 +82,7 @@ streamers must reconnect Twitch once to grant `user:write:chat`; read-only
 connections can still play. Announcements are paced, and uncertain deliveries
 are not retried to avoid duplicate posts after a restart.
 
-Open **Word history** in the setup card to browse the latest 200 completed
+Open **History & records → Word history** to browse the latest 200 completed
 words, outcomes and five closest other guesses with player names and ranks.
 Older summaries remain visible, but guesses not previously saved cannot be
 recovered. Records and history require persistent storage on hosted deployments.

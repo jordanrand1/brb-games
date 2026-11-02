@@ -1,5 +1,12 @@
 const $ = (selector) => document.querySelector(selector);
 document.body.classList.toggle("embedded-preview", new URLSearchParams(location.search).has("preview"));
+const stageView = location.pathname === "/play";
+const embeddedPlay = new URLSearchParams(location.search).has("embedded");
+document.body.classList.toggle("stage-view", stageView);
+document.body.classList.toggle("embedded-play", stageView && embeddedPlay);
+$("#play-navigation").classList.toggle("hidden", !stageView || embeddedPlay);
+$("#recent-activity").classList.toggle("hidden", !stageView);
+if (stageView) document.title = "BRB Arcade — Live game";
 const escapeHtml = (value) => String(value ?? "").replace(/[&<>"']/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[char]);
 let lastState = null;
 
@@ -16,6 +23,7 @@ function guessHeat(entry, exact, ai) {
 }
 
 function fitOverlay() {
+  if (stageView) return;
   const card = document.querySelector(".overlay-card:not(.hidden)");
   if (!card) return;
   const embedded = document.body.classList.contains("embedded-preview");
@@ -28,6 +36,10 @@ function fitOverlay() {
 const overlayResize = new ResizeObserver(fitOverlay);
 document.querySelectorAll(".overlay-card").forEach((card) => overlayResize.observe(card));
 window.addEventListener("resize", fitOverlay);
+if (stageView && embeddedPlay) {
+  const sizeObserver = new ResizeObserver(() => parent.postMessage({ type: "brb-stage-size", height: $("#overlay-root").scrollHeight }, location.origin));
+  sizeObserver.observe($("#overlay-root"));
+}
 
 function updateContextClock(state) {
   const now = state.paused ? state.pausedAt : Date.now();
@@ -74,6 +86,12 @@ function render(state) {
   wordleCard.classList.toggle("hidden", state.kind !== "wordle");
   krillionCard.classList.toggle("hidden", state.kind !== "krillion");
   if (state.kind === "context") {
+    if (stageView) {
+      renderRecentGuesses(state);
+      $(".hunt-subtitle").textContent = state.contextMode === "marathon"
+        ? "Marathon · " + (state.contextMarathonSolves || 0) + " solved · +15 seconds per solve"
+        : "Type a noun in Twitch chat · Streak " + (state.contextStreak || 0) + " · Level " + (state.contextLevel || 1);
+    }
     const guesses = state.contextGuesses || [];
     const finished = state.phase === "finished";
     const answerReveal = finished && state.target;
@@ -165,14 +183,46 @@ function render(state) {
 }
 
 const sourceToken = location.pathname.startsWith("/overlay/") ? location.pathname.slice(9) : null;
-const stream = new EventSource("/api/events" + (sourceToken ? "?source=" + encodeURIComponent(sourceToken) : ""));
+const stream = new EventSource("/api/events" + (stageView ? "?view=stage" : sourceToken ? "?source=" + encodeURIComponent(sourceToken) : ""));
 stream.addEventListener("state", (event) => {
   try { render(JSON.parse(event.data)); } catch (error) { console.warn("Overlay state could not be read", error); }
 });
 stream.addEventListener("patch", (event) => {
   try { render({ ...lastState, ...JSON.parse(event.data) }); } catch (error) { console.warn("Overlay update could not be read", error); }
 });
-stream.onerror = () => { $("#overlay-message") && ($("#overlay-message").textContent = "Reconnecting to the game…"); };
+stream.onopen = () => { $("#play-connection").classList.add("hidden"); };
+stream.onerror = () => {
+  $("#overlay-message").textContent = "Reconnecting to the game…";
+  if (stageView) {
+    $("#play-connection").classList.remove("hidden");
+    $("#play-connection").textContent = "Reconnecting… If this continues, return to the arcade to check your Twitch connection or the channel capacity.";
+  }
+};
+
+let recentSignature = "";
+function renderRecentGuesses(state) {
+  const guesses = state.contextRecentGuesses || [...(state.contextGuesses || [])].sort((a, b) => b.at - a.at).slice(0, 12);
+  const signature = JSON.stringify([state.contextRoundId, guesses]);
+  if (signature === recentSignature) return;
+  recentSignature = signature;
+  const list = $("#recent-guesses"); list.replaceChildren();
+  if (!guesses.length) {
+    const empty = document.createElement("li"); empty.className = "activity-empty";
+    empty.textContent = "Waiting for the first guess. Type a noun in Twitch chat!"; list.append(empty);
+  }
+  for (const guess of guesses) {
+    const row = document.createElement("li"); row.className = "activity-guess";
+    const by = document.createElement("span"); by.className = "activity-viewer"; by.textContent = guess.by;
+    const word = document.createElement("strong"); word.textContent = guess.word;
+    const rank = document.createElement("span"); rank.className = "activity-rank"; rank.textContent = "#" + guess.rank + " · " + Math.round(Math.max(0, guess.similarity || 0) * 100) + "%";
+    row.append(by, word, rank); list.append(row);
+  }
+}
+$("#play-fullscreen").addEventListener("click", async () => {
+  try { if (document.fullscreenElement) await document.exitFullscreen(); else await document.documentElement.requestFullscreen(); }
+  catch { $("#play-connection").textContent = "Your browser controls can also expand this window."; $("#play-connection").classList.remove("hidden"); }
+});
+document.addEventListener("fullscreenchange", () => { $("#play-fullscreen").textContent = document.fullscreenElement ? "Exit full screen" : "⛶ Full screen"; });
 setInterval(() => {
   if (lastState?.kind === "wordle") $("#overlay-clock").textContent = lastState.endsAt ? String(Math.max(0, Math.ceil((lastState.endsAt - (lastState.paused ? lastState.pausedAt : Date.now())) / 1000))) : "—";
   if (lastState?.kind === "context") updateContextClock(lastState);

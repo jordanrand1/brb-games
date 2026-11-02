@@ -41,9 +41,60 @@ let editorDirty = false;
 let overlaySource = null;
 let quota = null;
 let hydratedSettings = false;
+let editorIntent = "new";
+
+function gameCanBeEdited(state = latestState) {
+  return state && state.kind !== "idle" && (state.phase === "playing" || state.kind === "context" && state.phase === "finished" && !state.contextMarathonEnded);
+}
+
+function openDialog(id) {
+  if (!controlsAllowed) return;
+  const dialog = $("#" + id);
+  if (!dialog.open) dialog.showModal();
+}
+
+function openGame(intent = "new") {
+  if (!controlsAllowed || busy) return;
+  editorIntent = intent;
+  editorDirty = false;
+  startingFresh = intent === "new";
+  if (intent === "edit" && latestState) {
+    selectedGame = latestState.kind;
+    startingFresh = false;
+    hydratedGame = false;
+    renderControl(latestState);
+  }
+  $("#context-secret").value = "";
+  $("#game-error").classList.add("hidden");
+  $(".advanced-settings").open = false;
+  renderEditor();
+  openDialog("game-dialog");
+  $("#game-dialog").scrollTop = 0;
+}
+
+function renderWorkspace() {
+  const state = latestState;
+  const hasGame = Boolean(state && state.kind !== "idle");
+  const ended = hasGame && (state.contextMarathonEnded || state.phase === "finished" && state.kind !== "context");
+  $("#workspace-title").textContent = !hasGame ? "Ready when chat is." : ended ? "That’s a wrap." : "Your arcade is live.";
+  $("#workspace-description").textContent = !hasGame ? "Choose a game. Your community takes it from there." : ended ? "Start another game and give chat a new challenge." : state.paused ? "Your game is paused. It will resume when the connection is restored." : "Play along here, or take the game full screen.";
+  $("#edit-game").classList.toggle("hidden", !gameCanBeEdited(state));
+  $("#stop-game").classList.toggle("hidden", !hasGame);
+  $("#empty-stage").classList.toggle("hidden", hasGame);
+  $("#overlay-preview").classList.toggle("hidden", !hasGame);
+  $("#fullscreen-game").disabled = !hasGame;
+  $("#new-game").disabled = busy;
+  $("#edit-game").disabled = busy;
+  const stage = $("#overlay-preview");
+  const stageSource = controlsAllowed && hasGame ? "/play?embedded=1" : "about:blank";
+  if (stage.getAttribute("src") !== stageSource) stage.src = stageSource;
+  $("#play-instructions").textContent = state?.kind === "wordle" ? "Type !join, then !guess WORD in Twitch chat." : state?.kind === "krillion" ? "Type !answer YOUR ANSWER in Twitch chat." : state?.contextVote ? "Vote for the next theme: type 1, 2 or 3 in Twitch chat." : "Type a word in Twitch chat to play. No commands needed.";
+}
 
 function toast(message) {
   const node = $("#toast");
+  const host = $("dialog[open]") || document.body;
+  if (node.parentElement !== host) host.append(node);
   node.textContent = message;
   node.classList.add("show");
   clearTimeout(toast.timer);
@@ -72,13 +123,15 @@ function canEditCurrent() {
 }
 
 function renderEditor() {
-  $("#game-mode").value = selectedGame;
+  if ($("#game-mode").value !== selectedGame) $("#game-mode").value = selectedGame;
+  if ($("#game-mode").disabled !== (editorIntent === "edit")) $("#game-mode").disabled = editorIntent === "edit";
   $(".setup-panel").dataset.game = selectedGame;
   $("#game-description").textContent = descriptions[selectedGame];
-  $("#context-difficulty").value = selectedDifficulty;
+  if ($("#context-difficulty").value !== selectedDifficulty) $("#context-difficulty").value = selectedDifficulty;
   $("#context-clutch").checked = clutchEnabled;
   $("#context-hints").checked = hintsEnabled;
   if ($("#context-mode").value !== huntMode) $("#context-mode").value = huntMode;
+  if ($("#context-mode").disabled !== (editorIntent === "edit")) $("#context-mode").disabled = editorIntent === "edit";
   $("#context-theme-voting").checked = themeVoting;
   $("#context-chat-posts").checked = chatEnabled;
   $("#marathon-help").classList.toggle("hidden", huntMode !== "marathon");
@@ -104,18 +157,22 @@ function renderEditor() {
     });
   }
   const editing = canEditCurrent();
-  $("#setup-heading").textContent = editing ? "Edit your game" : "Set up your game";
+  $("#setup-heading").textContent = editorIntent === "edit" ? "Edit game" : "New game";
+  $("#editor-eyebrow").textContent = editorIntent === "edit" ? "KEEP THE FUN GOING" : "LET’S GET CHAT PLAYING";
+  $("#editor-description").textContent = editorIntent === "edit" ? "Adjust the settings. Keep your community’s progress." : "A few choices, then you’re ready to go.";
+  $("#editing-current").classList.toggle("hidden", editorIntent !== "edit");
   $("#context-secret-field").classList.toggle("hidden", editing);
   $("#krillion-prompt-field").classList.toggle("hidden", editing);
   const nextKrillion = selectedGame === "krillion" && latestState?.kind === "krillion" && latestState.phase === "round-complete";
   $("#game-submit").textContent = busy ? "Saving…" : editing ? selectedGame === "context" ? "Apply settings" : "Apply timer" : nextKrillion ? "Start next round →" : "Start " + (selectedGame === "context" && huntMode === "marathon" ? "Marathon" : gameNames[selectedGame]) + " →";
-  $("#game-submit").disabled = busy || !controlsAllowed || selectedGame === "krillion" && !editing && !quota?.available;
+  $("#game-submit").disabled = busy || !controlsAllowed || editorIntent === "edit" && !editing || selectedGame === "krillion" && !editing && !quota?.available;
+  if (editorIntent === "edit") $("#game-submit").textContent = busy ? "Saving…" : editing ? "Save changes" : "This game has ended";
   // Like the other draft fields, timing can be chosen before signing in or
   // enabling hints. Authorization remains on Apply and on the server.
   if (hintTimingSelect.disabled !== busy) hintTimingSelect.disabled = busy;
   $("#context-hint-timing-note").textContent = !hintsEnabled
     ? "Turn on Category hint to show it during the game."
-    : !controlsAllowed ? "Connect Twitch to apply these settings." : "Save your timing choice with Apply settings or Start game.";
+    : !controlsAllowed ? "Connect Twitch to apply these settings." : (editorIntent === "edit" ? "Save changes to apply your hint timing." : "Your hint timing will apply when the game starts.");
   if (huntMode === "marathon" && hintsEnabled) $("#context-hint-timing-note").textContent += " Marathon hint timing uses up to the first minute of each word.";
   $("#krillion-quota").textContent = quota ? quota.available ? quota.dailyRemaining + " judged rounds left today · $" + Number(quota.monthlyRemainingUsd).toFixed(2) + " shared AI budget left this month." : quota.reason : "Connect Twitch to see your Krillion allowance.";
   $("#editor-note").textContent = editing
@@ -123,12 +180,14 @@ function renderEditor() {
     : startingFresh && latestState?.kind !== "idle"
       ? "Starting fresh resets the current game and its progress."
       : selectedGame === "context" ? huntMode === "marathon" ? "One clock for the run. Solves add 15 seconds; reveals and votes pause it." : "Each new round uses this time limit." : "";
-  const sameGameRunning = latestState?.kind === selectedGame && (latestState.phase === "playing" || selectedGame === "context" && latestState.phase === "finished");
-  $("#fresh-game").classList.toggle("hidden", !sameGameRunning);
-  $("#fresh-game").textContent = startingFresh ? "Back to editing" : "Start fresh";
+  if (editorIntent === "new" && latestState?.kind !== "idle" && latestState) $("#editor-note").textContent = "Starting this game ends the current game. Your saved records stay.";
+  if (editorIntent === "edit" && !editing) $("#editor-note").textContent = "This game has ended. Start a new game to play again.";
+  $("#fresh-game").classList.toggle("hidden", editorIntent !== "edit");
+  $("#fresh-game").textContent = "Start a new game instead";
   $("#fresh-game").disabled = busy || !controlsAllowed;
   $("#stop-game").disabled = busy || !controlsAllowed || !latestState || latestState.kind === "idle";
   $("#viewer-instructions").textContent = instructions[latestState?.kind !== "idle" && latestState ? latestState.kind : selectedGame];
+  renderWorkspace();
 }
 
 function renderClock() {
@@ -157,8 +216,8 @@ function renderControl(state) {
     hydratedGame = true;
     saveDraft();
   }
-  $("#live-title").textContent = gameNames[state.kind] || "No game running";
-  const phase = state.contextMarathonEnded ? "RUN OVER" : state.kind === "context" && state.phase === "finished" ? "NEXT ROUND" : state.phase.toUpperCase().replaceAll("-", " ");
+  $("#live-title").textContent = (state.kind === "context" && state.contextMode === "marathon" ? "Word Hunt · Marathon" : gameNames[state.kind]) || "Your game appears here";
+  const phase = state.kind === "idle" ? "READY" : state.contextMarathonEnded ? "RUN OVER" : state.kind === "context" && state.phase === "finished" ? "NEXT ROUND" : state.phase.toUpperCase().replaceAll("-", " ");
   $("#phase-badge").textContent = state.paused ? "PAUSED" : phase;
   $("#phase-badge").classList.toggle("active", state.phase === "playing");
   $("#live-message").textContent = state.message;
@@ -185,7 +244,7 @@ function renderControl(state) {
   renderEditor();
   if (state.kind === "context" && state.phase === "finished" && lastHistoryRound !== state.contextRoundId) {
     lastHistoryRound = state.contextRoundId;
-    if ($("#round-history").open) loadHistory(true);
+    if ($("#records-dialog").open && $("#round-history").open) loadHistory(true);
   }
 }
 
@@ -285,26 +344,38 @@ async function refreshConfig() {
         hydratedSettings = true;
       }
       controlsAllowed = !config.twitchConfigured || config.twitchAuthenticated;
+      $("#onboarding").classList.toggle("hidden", controlsAllowed);
+      $("#workspace").classList.toggle("hidden", !controlsAllowed);
+      $("#workspace").inert = !controlsAllowed;
+      $("#header-status").classList.toggle("hidden", !controlsAllowed);
+      $("#account-button").classList.toggle("hidden", !config.twitchAuthenticated);
+      $("#account-name").textContent = config.channel || "Your channel";
+      $("#account-avatar").textContent = (config.channel || "?").slice(0, 1).toUpperCase();
+      $("#account-detail").textContent = "Connected as " + (config.channel || "your channel") + ".";
+      $("#channel-eyebrow").textContent = config.twitchConfigured ? (config.channel || "Your channel").toUpperCase() + "’S ARCADE" : "LOCAL DEVELOPMENT PREVIEW";
+      if (!controlsAllowed) {
+        events?.close(); events = null; eventView = null;
+        latestState = null;
+        $("#private-answer").textContent = "";
+        for (const dialog of $$("dialog[open]")) dialog.close();
+      }
       $("#account-tools").classList.toggle("hidden", !config.twitchAuthenticated);
       $("#operator-link").classList.toggle("hidden", !config.isOwner);
       $("#rotate-overlay").classList.toggle("hidden", !config.twitchAuthenticated);
-      $(".overlay-link").classList.toggle("hidden", !config.overlayUrl);
-      $("#source-placeholder").textContent = config.overlayUrl ? "TRANSPARENT OVERLAY" : "CONNECT TWITCH TO GET YOUR PERSONAL SOURCE";
       if (overlaySource !== config.overlayUrl) {
         overlaySource = config.overlayUrl;
         $("#overlay-url").textContent = overlaySource || "Connect Twitch to get your personal OBS URL.";
-        $("#overlay-preview").src = overlaySource ? overlaySource + "?preview=1" : "about:blank";
-        if (overlaySource) $(".overlay-link").href = overlaySource;
       }
       const status = $("#connection-state");
       status.textContent = config.twitchConnected ? "Connected · " + config.channel : config.status;
       status.closest(".status-pill").classList.toggle("connected", Boolean(config.twitchConnected));
       status.closest(".status-pill").title = config.message;
       const connect = $("#connect-button");
-      connect.classList.toggle("hidden", Boolean(config.twitchAuthenticated));
       connect.disabled = !config.twitchConfigured;
-      connect.textContent = config.twitchConfigured ? "Connect Twitch" : "Twitch setup needed";
+      $("#connect-label").textContent = config.twitchConfigured ? "Connect with Twitch" : "Twitch setup needed";
       connect.title = config.message;
+      $("#onboarding-note").textContent = config.signupMode === "invite" ? "Connect an invited Twitch account to get started." : "Connect your channel to get started. Viewers play directly in chat.";
+      $("#retry-connection").classList.add("hidden");
       $("#logout-button").classList.toggle("hidden", !config.twitchAuthenticated);
       const note = $("#connection-note");
       note.classList.toggle("hidden", !config.twitchConfigured || config.twitchConnected);
@@ -315,6 +386,11 @@ async function refreshConfig() {
       renderEditor();
     } catch (error) {
       $("#connection-state").textContent = "Waiting for server…";
+      if (!latestConfig) {
+        $("#connect-label").textContent = "Connect with Twitch";
+        $("#onboarding-note").textContent = "We couldn’t reach the server. Try connecting again in a moment.";
+        $("#retry-connection").classList.remove("hidden");
+      }
       console.warn(error);
     }
   })();
@@ -333,7 +409,7 @@ $("#krillion-prompt").value = typeof draft.prompt === "string" ? draft.prompt : 
 $("#game-mode").addEventListener("change", (event) => {
   editorDirty = true;
   selectedGame = event.target.value;
-  startingFresh = false;
+  startingFresh = editorIntent === "new";
   saveDraft();
   renderEditor();
 });
@@ -357,11 +433,13 @@ $("#chat-permission").addEventListener("click", () => { location.href = "/auth/s
 $("#round-history").addEventListener("toggle", () => { if ($("#round-history").open) loadHistory(true); });
 $("#history-more").addEventListener("click", () => loadHistory(false));
 $("#context-clutch").addEventListener("change", (event) => { editorDirty = true; clutchEnabled = event.target.checked; saveDraft(); renderEditor(); });
-$("#fresh-game").addEventListener("click", () => { startingFresh = !startingFresh; renderEditor(); });
+$("#fresh-game").addEventListener("click", () => openGame("new"));
 $("#game-form").addEventListener("submit", async (event) => {
   event.preventDefault();
   if (busy || !controlsAllowed) return;
   const editing = canEditCurrent();
+  if (editorIntent === "edit" && !editing) return;
+  $("#game-error").classList.add("hidden");
   const body = editing
     ? { action: "configure", durationSeconds: durations[selectedGame], difficulty: selectedGame === "context" ? selectedDifficulty : undefined, clutchEnabled: selectedGame === "context" ? clutchEnabled : undefined, hintsEnabled: selectedGame === "context" ? hintsEnabled : undefined, hintTiming: selectedGame === "context" ? hintTiming : undefined }
     : { action: selectedGame, durationSeconds: durations[selectedGame],
@@ -380,8 +458,9 @@ $("#game-form").addEventListener("submit", async (event) => {
     hydratedGame = true;
     $("#context-secret").value = "";
     saveDraft();
+    $("#game-dialog").close();
     toast(editing ? selectedGame === "context" ? "Hunt settings updated." : "Round timer updated." : gameNames[selectedGame] + " is live.");
-  } catch (error) { toast(error.message); }
+  } catch (error) { $("#game-error").textContent = error.message; $("#game-error").classList.remove("hidden"); }
   finally { busy = false; renderEditor(); }
 });
 $("#stop-game").addEventListener("click", async () => {
@@ -393,6 +472,29 @@ $("#retry-krillion-judging").addEventListener("click", async () => {
   catch (error) { toast(error.message); }
 });
 $("#connect-button").addEventListener("click", () => { location.href = "/auth/start"; });
+$("#retry-connection").addEventListener("click", () => refreshConfig());
+$("#new-game").addEventListener("click", () => openGame("new"));
+$("#start-first-game").addEventListener("click", () => openGame("new"));
+$("#edit-game").addEventListener("click", () => openGame("edit"));
+$("#open-obs").addEventListener("click", () => openDialog("obs-dialog"));
+$("#open-records").addEventListener("click", () => { openDialog("records-dialog"); if ($("#round-history").open) loadHistory(true); else $("#round-history").open = true; });
+$("#account-button").addEventListener("click", () => openDialog("account-dialog"));
+for (const button of $$("[data-close-dialog]")) button.addEventListener("click", () => button.closest("dialog").close());
+$("#game-dialog").addEventListener("close", () => {
+  $("#context-secret").value = "";
+  editorDirty = false; startingFresh = false;
+  if (latestState) renderControl(latestState);
+});
+$("#fullscreen-game").addEventListener("click", async () => {
+  try { await $("#play-stage").requestFullscreen(); }
+  catch { toast("Use Pop out for a larger game window in this browser."); }
+});
+$("#exit-fullscreen").addEventListener("click", () => { if (document.fullscreenElement) document.exitFullscreen().catch(() => {}); });
+window.addEventListener("message", (event) => {
+  const height = event.data?.height;
+  if (event.origin !== location.origin || event.source !== $("#overlay-preview").contentWindow || event.data?.type !== "brb-stage-size" || !Number.isFinite(height)) return;
+  $("#play-stage").style.setProperty("--game-height", Math.max(460, Math.min(5000, Math.ceil(height))) + "px");
+});
 $("#logout-button").addEventListener("click", async () => {
   try {
     await request("/auth/logout", { method: "POST" });
@@ -431,6 +533,7 @@ $("#demo-form").addEventListener("submit", async (event) => {
 const params = new URLSearchParams(location.search);
 if (params.get("notice") === "invite-required") toast("This beta is invite-only. Ask the operator to invite your Twitch account.");
 if (params.get("notice") === "deleted") toast("Your channel data and Twitch access have been removed.");
+if (params.get("notice") === "connect-required") toast("Connect Twitch to open your live game.");
 if (params.has("connected")) {
   toast("Twitch connected. Restoring chat…");
   params.delete("connected");

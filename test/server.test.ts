@@ -56,6 +56,10 @@ test("hosted OAuth, control authorization, channel SSE, refresh, rotation and de
   const app = await fixture(t);
   const denied = await app.login("303"); assert.match(denied.response.headers.get("location")!, /invite-required/); assert.equal(denied.cookie, "");
   const one = await app.login("101"), two = await app.login("202");
+  const signedOutPlay = await fetch(app.address + "/play", { redirect: "manual" });
+  assert.equal(signedOutPlay.status, 302); assert.match(signedOutPlay.headers.get("location")!, /connect-required/);
+  assert.equal((await app.call("/api/events?view=stage")).status, 401);
+  assert.equal((await app.call("/play", one.cookie)).status, 200);
   assert.match(one.response.headers.getSetCookie()[0]!, /HttpOnly; SameSite=Lax/); assert.match(one.response.headers.getSetCookie()[0]!, /Secure/);
   assert.equal((await app.call("/api/control", "", { action: "context" })).status, 401);
   assert.equal((await app.call("/api/control", one.cookie, { action: "context" }, "https://evil.example")).status, 403);
@@ -66,6 +70,9 @@ test("hosted OAuth, control authorization, channel SSE, refresh, rotation and de
   assert.equal((await app.call("/api/operator/status", one.cookie)).status, 200);
   assert.equal((await app.call("/api/control", one.cookie, { action: "context", secret: "tiger", durationSeconds: 120 })).status, 200);
   assert.equal((await app.call("/api/control", two.cookie, { action: "context", secret: "tree" })).status, 200);
+  const stage = await (await app.call("/api/state?view=stage&channel=202", one.cookie)).json();
+  assert.equal(stage.kind, "context"); assert.equal(stage.privateTarget, undefined); assert.equal(stage.target, undefined);
+  assert.equal(stage.community.id, "101");
   const config1 = await (await app.call("/api/config", one.cookie)).json(), config2 = await (await app.call("/api/config", two.cookie)).json();
   assert.equal((await app.call("/api/control", one.cookie, { action: "configure", durationSeconds: 120, hintTiming: "invalid" })).status, 400);
   await app.call("/api/control", one.cookie, { action: "configure", durationSeconds: 120, hintsEnabled: false, hintTiming: "end" });

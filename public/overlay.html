@@ -6,16 +6,20 @@
   <meta name="theme-color" content="#000000">
   <title>BRB Arcade Overlay</title>
   <link rel="stylesheet" href="/overlay.css">
+  <link rel="stylesheet" href="/stage.css">
 </head>
 <body>
+  <nav class="play-navigation hidden" id="play-navigation" aria-label="Game view"><a href="/">← Back to arcade</a><span>BRB ARCADE · LIVE GAME</span><button id="play-fullscreen" type="button">⛶ Full screen</button></nav>
+  <div id="play-connection" class="play-connection hidden" role="status"></div>
   <main id="overlay-root" class="overlay-root">
     <section id="waiting-card" class="overlay-card waiting-card">
       <div class="mini-brand"><span class="brand-mark">b</span><span>BRB ARCADE</span></div>
-      <p>Chat game loading</p>
+      <p id="waiting-message">Waiting for a game…</p><span class="stage-waiting-help">Start a game from your arcade. It will appear here automatically.</span><a class="stage-waiting-link" href="/" target="_top">Back to arcade →</a>
       <div class="waiting-pips"><i></i><i></i><i></i></div>
     </section>
     <section id="context-card" class="overlay-card game-card-overlay hidden">
       <header class="overlay-header hunt-header"><div><span class="overlay-eyebrow"><span class="hunt-mark" aria-hidden="true">◉</span> WORD HUNT <b id="context-round">R01</b><b id="context-difficulty-badge" class="difficulty-badge">STANDARD</b></span><h1>Hunt the word<span>.</span></h1><p class="hunt-subtitle">One secret noun. All of chat.</p></div><div id="context-timer" class="hunt-timer"><div><strong id="context-clock">1:00</strong><span id="context-clock-label">TIME LEFT</span></div></div></header>
+      <div class="hunt-layout"><div class="hunt-main">
       <div class="context-hype"><div class="context-hype-top"><span>CHAT STREAK <b id="context-streak-footer">0</b></span><strong id="context-hype-level">LEVEL 1</strong></div><div class="context-hype-track"><span id="context-hype-fill"></span><i></i><i></i></div><div class="context-hype-foot"><span id="context-hype-wins">0 consecutive wins</span><span id="context-hype-progress">0 / 3 TO LEVEL UP</span></div></div>
       <div id="marathon-banner" class="marathon-banner hidden"><span>MARATHON <strong id="marathon-run-clock"></strong></span><b><span id="marathon-word-count">0</span> WORDS · BEST <span id="marathon-best">0</span><br>+15s / SOLVE</b></div>
       <div id="theme-vote" class="theme-vote hidden" role="status"><strong>VOTE FOR THE NEXT THEME</strong><div id="theme-options"></div><span>Type 1, 2 or 3 in chat · one vote each</span></div>
@@ -27,6 +31,7 @@
       <div class="hunt-list-heading"><span><i></i> BEST GUESSES SO FAR <b id="guess-count">0</b></span><span id="context-score-label">ASSOCIATION</span></div>
       <p id="context-direction" class="hunt-direction hidden" role="status"></p>
       <div id="overlay-guesses" class="overlay-guesses"></div>
+      </div><aside id="recent-activity" class="recent-activity hidden" aria-labelledby="recent-heading"><div class="activity-heading"><h2 id="recent-heading">Just guessed</h2><span><i></i> LIVE</span></div><p>The latest accepted guesses from your community.</p><ol id="recent-guesses"></ol><p class="activity-footnote">Every guess helps chat find a direction.</p></aside></div>
       <div id="overlay-message" class="overlay-message hunt-activity">Every guess brings chat a little closer.</div>
       <div class="hunt-community-records"><span>COMMUNITY RECORDS</span><b id="overlay-record-streak">BEST STREAK 0</b><b id="overlay-record-wins">0 WINS</b><b id="overlay-record-fastest">BEST —</b></div>
       <footer class="overlay-footer hunt-footer"><span><b>PLAY ALONG</b> Type a word in chat</span><span class="mini-logo">BRB <i>ARCADE</i></span></footer>

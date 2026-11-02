@@ -30,6 +30,22 @@ test("context guesses are unique across chatters and the exact answer ends the r
   assert.equal(game.publicState().target, "ocean");
 });
 
+test("the browser activity feed includes recent cold guesses outside the closest list and stays private before reveal", (t) => {
+  const game = new GameService(); t.after(() => game.dispose());
+  let now = Date.now(); t.mock.method(Date, "now", () => now);
+  game.startContext("tiger", 300);
+  const words = lexicon.filter((word) => word !== "tiger").slice(0, 30).sort((a, b) => getWordRank("tiger", a)! - getWordRank("tiger", b)!);
+  for (const word of words) { now += 1000; game.chatGuess("viewer", "Viewer", word); }
+  const state = game.publicState() as any;
+  assert.equal(state.contextRecentGuesses.length, 12);
+  assert.equal(state.contextRecentGuesses[0].word, words.at(-1));
+  assert.ok(!state.contextGuesses.some((guess: any) => guess.word === words.at(-1)));
+  assert.equal(state.target, undefined); assert.equal(state.privateTarget, undefined);
+  const restored = new GameService(); t.after(() => restored.dispose());
+  restored.restore(game.checkpoint());
+  assert.equal((restored.publicState().contextRecentGuesses as any[])[0].word, words.at(-1));
+});
+
 test("Wordle keeps personal boards and advances when all live players solve", () => {
   const game = new GameService();
   game.startWordle(45, "apple");
