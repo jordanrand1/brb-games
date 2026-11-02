@@ -144,3 +144,22 @@ for (const access of [{ signupMode: "", invitedIds: "" }, { signupMode: "public"
     assert.ok(overlay.includes("WORD HUNT"));
   });
 }
+
+test("renamed modes expose new names and API actions while preserving saved game identifiers", { timeout: 20_000 }, async (t) => {
+  const app = await fixture(t);
+  const user = await app.login("101");
+  const page = await (await app.call("/")).text();
+  assert.match(page, />✳ Odd One In</); assert.match(page, />▦ Word Sprint</);
+  assert.ok(!/>[^<]*(?:Wordle|Krillion)[^<]*</.test(page));
+  const started = await app.call("/api/control", user.cookie, { action: "wordsprint", durationSeconds: 60, secret: "apple" });
+  assert.equal(started.status, 200);
+  assert.equal((await started.json()).state.kind, "wordle");
+  const settings = (await (await app.call("/api/config", user.cookie)).json()).settings;
+  assert.equal(settings.mode, "wordle"); assert.equal(settings.durations.wordle, 60);
+  await app.restart();
+  const restored = await (await app.call("/api/state?view=control", user.cookie)).json();
+  assert.equal(restored.kind, "wordle"); assert.equal(restored.privateTarget, "apple");
+  const locked = await app.call("/api/control", user.cookie, { action: "oddonein" });
+  assert.equal(locked.status, 400); assert.match((await locked.json()).error, /Odd One In/);
+  assert.equal((await app.call("/api/control", user.cookie, { action: "wordle" })).status, 200);
+});

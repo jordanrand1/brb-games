@@ -228,7 +228,7 @@ export class GameService {
   startKrillion(durationSeconds = 30, promptInput?: string): void {
     this.pausedAt = null;
     const prompt = (promptInput || choose(krillionPrompts)).trim().replace(/\s+/g, " ");
-    if (prompt.length < 8 || prompt.length > 180) throw new Error("Krillion prompts must be 8 to 180 characters.");
+    if (prompt.length < 8 || prompt.length > 180) throw new Error("Odd One In prompts must be 8 to 180 characters.");
     const duration = [30, 45, 60].includes(durationSeconds) ? durationSeconds : 30;
     this.state = {
       ...freshState(), kind: "krillion", phase: "playing", round: 1, startedAt: Date.now(),
@@ -241,7 +241,7 @@ export class GameService {
   submitKrillionAnswer(loginInput: string, displayNameInput: string | undefined, answerInput: string): string {
     if (this.pausedAt !== null) return "This game is paused.";
     if (this.state.endsAt && Date.now() >= this.state.endsAt) { this.advanceIfDue(); return "Time is up."; }
-    if (this.state.kind !== "krillion" || this.state.phase !== "playing") return "Krillion is not collecting answers right now.";
+    if (this.state.kind !== "krillion" || this.state.phase !== "playing") return "Odd One In is not collecting answers right now.";
     const login = cleanLogin(loginInput);
     const displayName = displayNameInput?.trim() || login;
     const answer = answerInput.replace(/[\u0000-\u001f\u007f]/g, " ").replace(/\s+/g, " ").trim();
@@ -296,7 +296,7 @@ export class GameService {
 
   join(loginInput: string, displayNameInput?: string): string {
     if (this.pausedAt !== null) return "This game is paused.";
-    if (this.state.kind !== "wordle" || this.state.phase !== "playing") return "There is no Wordle race to join right now.";
+    if (this.state.kind !== "wordle" || this.state.phase !== "playing") return "There is no Word Sprint race to join right now.";
     const login = cleanLogin(loginInput);
     if (!login) return "Twitch username could not be read.";
     if (Object.hasOwn(this.state.players, login)) return `${displayNameInput || login} is already in the race.`;
@@ -341,7 +341,7 @@ export class GameService {
       }
       if (!player || !player.alive) return "You have been eliminated from this race.";
       if (player.solved) return "You already solved this round. Wait for the next word.";
-      if (word.length !== 5 || !wordleWords.includes(word)) return "That guess is not in the demo Wordle list.";
+      if (word.length !== 5 || !wordleWords.includes(word)) return "That guess is not in the Word Sprint word list.";
       const attempt = { word, colors: wordleFeedback(word, this.state.target!), at: Date.now() };
       player.attempts.push(attempt);
       if (word === this.state.target) player.solved = true;
@@ -519,7 +519,7 @@ export class GameService {
     this.state.phase = "finished";
     this.state.winner = winner;
     this.state.endsAt = null;
-    this.state.message = winner ? `${winner} wins the Wordle race! The word was ${this.state.target}.` : `The race is over. Nobody survived. The word was ${this.state.target}.`;
+    this.state.message = winner ? `${winner} wins the Word Sprint race! The word was ${this.state.target}.` : `The race is over. Nobody survived. The word was ${this.state.target}.`;
     this.emit();
   }
 

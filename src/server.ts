@@ -220,7 +220,9 @@ const server = createServer(async (req, res) => {
     if (req.method === "POST" && url.pathname === "/api/control") {
       const room = roomFor(req);
       if (room.storageError) throw new HttpError(503, "Game storage is unavailable. Contact the operator.");
-      const value = await body(req), action = String(value.action || "");
+      const value = await body(req), requestedAction = String(value.action || "");
+      // Keep checkpoint/settings identifiers stable while exposing the new names.
+      const action = requestedAction === "wordsprint" ? "wordle" : requestedAction === "oddonein" ? "krillion" : requestedAction === "retry-oddonein-judging" ? "retry-krillion-judging" : requestedAction;
       const options = { difficulty: typeof value.difficulty === "string" ? value.difficulty as ContextDifficulty : undefined, clutchEnabled: typeof value.clutchEnabled === "boolean" ? value.clutchEnabled : undefined, hintsEnabled: typeof value.hintsEnabled === "boolean" ? value.hintsEnabled : undefined, hintTiming: typeof value.hintTiming === "string" ? value.hintTiming as "start" | "middle" | "end" : undefined,
         huntMode: typeof value.huntMode === "string" ? value.huntMode as "rounds" | "marathon" : undefined, themeVoting: typeof value.themeVoting === "boolean" ? value.themeVoting : undefined, chatEnabled: typeof value.chatEnabled === "boolean" ? value.chatEnabled : undefined };
       try {

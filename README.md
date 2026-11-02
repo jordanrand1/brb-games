@@ -1,14 +1,14 @@
 # BRB Arcade
 
 Twitch chat games for BRB screens and playing along with your community:
-Word Hunt, Wordle elimination, and Krillion. Streamers connect Twitch,
+Word Hunt, Word Sprint, and Odd One In. Streamers connect Twitch,
 configure a game, and copy a personal transparent OBS Browser Source URL.
 
 Any streamer can sign in with Twitch. The hosted beta supports up to ten active
 Twitch channels at once, each with independent controls, games, connections,
 records, settings and OBS URLs. One Node server
 and SQLite keep the deployment small; Word Hunt uses bundled commonsense word vectors
-without per-guess API fees. Krillion has a durable $2 site-wide monthly ceiling,
+without per-guess API fees. Odd One In has a durable $2 site-wide monthly ceiling,
 ten rounds per channel per UTC day, and an operator validation gate.
 
 ## Run locally
@@ -62,16 +62,16 @@ permissions require another Twitch sign-in.
   Each viewer has one changeable ballot; ties are random, no votes means Mystery.
   Themes draw from the same unused word bag. Marathon selects voting by default
   in the dashboard; it can also be enabled for regular rounds.
-- **Wordle:** `!join`, then `!guess WORD`. Six guesses each, public personal
+- **Word Sprint:** `!join`, then `!guess WORD`. Six guesses each, public personal
   boards, and 30/45/60-second elimination rounds. A race is capped at 100 players.
-- **Krillion:** one `!answer YOUR ANSWER` per viewer, up to 100 answers per round.
+- **Odd One In:** one `!answer YOUR ANSWER` per viewer, up to 100 answers per round.
   After 30/45/60 seconds, one AI batch judges relevance and originality. Answers
   below 50 relevance score zero; valid answers score 70% relevance and 30%
   novelty. Exact duplicates get zero novelty. Provider failures preserve answers;
   explicit retries are budgeted, and uncertain requests cannot be resent.
 
-Broadcaster/moderator chat controls: `!game wordhunt` (or `!game hunt`), `!game wordle`,
-`!game krillion [optional question]`, `!stop`. Roles and broadcaster identity
+Broadcaster/moderator chat controls: `!game wordhunt` (or `!game hunt`), `!game wordsprint`,
+`!game oddonein [optional question]`, `!stop`. Roles and broadcaster identity
 come from authenticated Twitch EventSub events and are checked server-side.
 The older `!game context` command remains supported.
 `!game marathon` starts a Marathon using saved settings.
@@ -146,7 +146,7 @@ session and funded live judge validation are launch requirements.
 
 Publish the repository and run instructions, project description, a public
 YouTube demo of up to three minutes, and the main Codex build session ID.
-Future ideas, including cross-community Krillion answer depth, stay in
+Future ideas, including cross-community Odd One In answer depth, stay in
 [BACKLOG.md](BACKLOG.md).
 
 Semantic ranking, target filtering, and model upgrades are explained in

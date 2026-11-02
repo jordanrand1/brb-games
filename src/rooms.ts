@@ -71,7 +71,7 @@ export class Rooms {
     const row = this.database.sql.prepare("SELECT value FROM meta WHERE key='judge-validation'").get() as any;
     const approved = row ? JSON.parse(row.value) : null;
     const validated = approved?.passed === true && approved.model === (this.options.model || "gpt-6-luna");
-    return { ...quota, judgeReady: Boolean(this.options.aiKey) && validated, available: Boolean(this.options.aiKey) && validated && quota.available, reason: !this.options.aiKey ? "Krillion is unavailable until the operator enables AI judging." : !validated ? "The operator needs to validate AI judging before Krillion opens." : quota.reason };
+    return { ...quota, judgeReady: Boolean(this.options.aiKey) && validated, available: Boolean(this.options.aiKey) && validated && quota.available, reason: !this.options.aiKey ? "Odd One In is unavailable until the operator enables AI judging." : !validated ? "The operator needs to validate AI judging before Odd One In opens." : quota.reason };
   }
   requireQuota(id: string): void { const quota = this.quota(id); if (!quota.available) throw new Error(String(quota.reason)); }
 
@@ -190,8 +190,11 @@ export class Rooms {
       if (action === "stop" || argument.toLowerCase() === "stop") room.game.stop();
       else if (["context", "hunt", "wordhunt", "word hunt"].includes(argument.toLowerCase())) room.game.startContext(undefined, durations.context || 60, settings);
       else if (argument.toLowerCase() === "marathon") room.game.startContext(undefined, durations.context || 180, { ...settings, huntMode: "marathon", themeVoting: settings.themeVoting !== false });
-      else if (argument.toLowerCase() === "wordle") room.game.startWordle(durations.wordle || 45);
-      else if (/^krillion(?:\s|$)/i.test(argument)) { this.requireQuota(room.id); room.game.startKrillion(durations.krillion || 30, argument.slice(8).trim() || undefined); }
+      else if (["wordsprint", "word sprint", "wordle"].includes(argument.toLowerCase())) room.game.startWordle(durations.wordle || 45);
+      else {
+        const creative = argument.match(/^(?:oddonein|odd one in|krillion)(?:\s+(.*))?$/i);
+        if (creative) { this.requireQuota(room.id); room.game.startKrillion(durations.krillion || 30, creative[1]?.trim() || undefined); }
+      }
     }
   }
 }

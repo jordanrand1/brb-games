@@ -4,7 +4,7 @@ Word Hunt compares every guess against the same secret using local
 ConceptNet Numberbatch 19.08 vectors. Numberbatch includes commonsense graph
 relationships in addition to text-trained embeddings. It requires no paid
 per-guess request and is independent of OPENAI_API_KEY, which only enables
-Krillion judging. The scorer is identified in game state and on the dashboard.
+Odd One In judging. The scorer is identified in game state and on the dashboard.
 
 The previous quantized GloVe data produced poor gameplay relationships: with
 `tiger` as the target, `space` ranked ahead of `animal` and `jungle`. The original

@@ -1,7 +1,7 @@
 type JudgeResult = { id: string; relevance: number; novelty: number; reason: string };
 import type { AppDatabase } from "./database.ts";
 
-/** Grades one complete Krillion round in a single structured-output request. */
+/** Grades one complete Odd One In round in a single structured-output request. */
 export class KrillionJudge {
   private readonly apiKey: string;
   private readonly model: string;
@@ -89,11 +89,11 @@ export class KrillionJudge {
       const data = await response.json() as { choices?: Array<{ message?: { content?: string | null } }>; usage?: { prompt_tokens: number; completion_tokens: number } };
       if (data.usage && Number.isFinite(data.usage.prompt_tokens) && Number.isFinite(data.usage.completion_tokens)) actualCharge = Math.ceil(data.usage.prompt_tokens * .1 + data.usage.completion_tokens * .5);
       const content = data.choices?.[0]?.message?.content;
-      if (!content) throw new Error("Krillion AI judge returned no scores.");
+      if (!content) throw new Error("Odd One In AI judge returned no scores.");
       const parsed = JSON.parse(content) as { results?: JudgeResult[] };
       const ids = new Set(answers.map((entry) => entry.id));
       const results = (parsed.results || []).filter((entry) => ids.has(entry.id) && Number.isInteger(entry.relevance) && entry.relevance >= 0 && entry.relevance <= 100 && Number.isInteger(entry.novelty) && entry.novelty >= 0 && entry.novelty <= 100 && typeof entry.reason === "string").map((entry) => ({ ...entry, reason: entry.reason.slice(0, 100) }));
-      if (results.length !== ids.size || new Set(results.map((entry) => entry.id)).size !== ids.size) throw new Error("Krillion AI judge returned an incomplete score sheet.");
+      if (results.length !== ids.size || new Set(results.map((entry) => entry.id)).size !== ids.size) throw new Error("Odd One In AI judge returned an incomplete score sheet.");
       if (reservation) { this.options!.database.settle(reservation, actualCharge, "complete", results); settled = true; }
       return results;
     } catch (error) {

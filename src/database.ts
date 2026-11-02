@@ -116,7 +116,7 @@ export class AppDatabase {
     const total = (this.sql.prepare("SELECT COALESCE(SUM(charged),0) total FROM ai_requests WHERE month=?").get(month) as any).total;
     const daily = (this.sql.prepare("SELECT COUNT(DISTINCT round_id) total FROM ai_requests WHERE channel_id=? AND day=?").get(channelId, day) as any).total;
     const dailyRemaining = Math.max(0, this.dailyLimit - daily), monthlyRemainingUsd = Math.max(0, this.monthlyLimit - total) / 1_000_000;
-    return { available: dailyRemaining > 0 && monthlyRemainingUsd >= .01, reason: !dailyRemaining ? "Today's Krillion allowance is used. It resets at midnight UTC." : monthlyRemainingUsd < .01 ? "The site's monthly AI allowance is used. Word Hunt is still available." : "", dailyRemaining, monthlyRemainingUsd, monthlyLimitUsd: this.monthlyLimit / 1_000_000 };
+    return { available: dailyRemaining > 0 && monthlyRemainingUsd >= .01, reason: !dailyRemaining ? "Today's Odd One In allowance is used. It resets at midnight UTC." : monthlyRemainingUsd < .01 ? "The site's monthly AI allowance is used. Word Hunt is still available." : "", dailyRemaining, monthlyRemainingUsd, monthlyLimitUsd: this.monthlyLimit / 1_000_000 };
   }
 
   reserve(channelId: string, roundId: string, maximum: number, now = Date.now()): string {

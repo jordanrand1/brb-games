@@ -46,7 +46,7 @@ test("the browser activity feed includes recent cold guesses outside the closest
   assert.equal((restored.publicState().contextRecentGuesses as any[])[0].word, words.at(-1));
 });
 
-test("Wordle keeps personal boards and advances when all live players solve", () => {
+test("Word Sprint keeps personal boards and advances when all live players solve", () => {
   const game = new GameService();
   game.startWordle(45, "apple");
   game.join("alpha", "Alpha");
@@ -62,7 +62,7 @@ test("Wordle keeps personal boards and advances when all live players solve", ()
   assert.equal(game.state.players.alpha?.attempts.length, 0);
 });
 
-test("Wordle eliminates a player after six misses and declares the remaining player", () => {
+test("Word Sprint eliminates a player after six misses and declares the remaining player", () => {
   const game = new GameService();
   game.startWordle(60, "apple");
   game.join("champion", "Champion");
@@ -75,7 +75,7 @@ test("Wordle eliminates a player after six misses and declares the remaining pla
   assert.equal(game.state.winner, "Champion");
 });
 
-test("Wordle timeout eliminates unsolved players and advances surviving solvers", () => {
+test("Word Sprint timeout eliminates unsolved players and advances surviving solvers", () => {
   const game = new GameService();
   game.startWordle(30, "apple");
   game.join("survivor", "Survivor");

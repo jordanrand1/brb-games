@@ -1,6 +1,6 @@
 # Product backlog
 
-## Krillion: shared questions and answers across communities
+## Odd One In: shared questions and answers across communities
 
 Status: consideration for a later phase.
 

@@ -59,13 +59,13 @@ local tests.
    `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`. Do not enable public access.
 7. Set a funded `OPENAI_API_KEY`, `OPENAI_JUDGE_MODEL=gpt-6-luna`, and
    `AI_MONTHLY_BUDGET_USD=2` (or a smaller value). Word Hunt always uses local
-   commonsense vectors; this key enables only capped Krillion judging. Models other than
+   commonsense vectors; this key enables only capped Odd One In judging. Models other than
    the audited judge are rejected. Provider billing alerts are additional to,
    and do not replace, the application's transaction-based spending limit.
 8. Deploy. Sign in as the owner, open `/operator`, run **Validate AI judge**, and
    confirm it passes. This sends one small scored batch through the same budget
    ledger. It checks direct relevance, off-topic answers, duplicates and answer
-   instruction injection. Krillion remains unavailable until the check passes.
+   instruction injection. Odd One In remains unavailable until the check passes.
 9. Run **Run backup now**, confirm a recent success, download the resulting
    encrypted object and test restoration into a disposable empty directory.
    Restore and recovery instructions are in [storage.md](storage.md).

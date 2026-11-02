@@ -16,7 +16,7 @@ app processes against the same disk or copy only the live main database file.
 | Backups | Encrypted consistent SQLite export in private R2 Standard storage, seven-day lifecycle |
 
 Only game submissions are saved, not a general Twitch chat log. Public game state
-omits secrets until reveal and omits Krillion answers until judging is complete.
+omits secrets until reveal and omits Odd One In answers until judging is complete.
 SSE state is scoped to a broadcaster's authenticated session or an unguessable
 read-only OBS capability. Refresh gets a complete state, then bounded patches.
 Theme ballots are checkpointed privately; clients receive only aggregate vote
@@ -27,7 +27,7 @@ outcome is not retried. Missed announcements do not prevent gameplay.
 On Render, setting `BRB_DATA_DIR=/var/data` alone does not make data persistent.
 Attach a persistent disk mounted at `/var/data`. Without it, a restart or redeploy
 can erase accounts, sessions, scores, history, word bags and the AI budget ledger.
-Do not enable paid Krillion judging on an ephemeral deployment. Adding a disk
+Do not enable paid Odd One In judging on an ephemeral deployment. Adding a disk
 triggers a redeploy and does not automatically migrate the prior filesystem.
 
 `SESSION_SECRET` signs browser cookies. `ENCRYPTION_KEY` encrypts Twitch

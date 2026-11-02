@@ -1,6 +1,6 @@
 const $ = (selector) => document.querySelector(selector);
 const $$ = (selector) => [...document.querySelectorAll(selector)];
-const gameNames = { context: "Word Hunt", krillion: "Krillion", wordle: "Wordle elimination" };
+const gameNames = { context: "Word Hunt", krillion: "Odd One In", wordle: "Word Sprint" };
 const descriptions = {
   context: "Chat guesses a secret noun. Each win builds the streak, then a new word starts automatically.",
   krillion: "One answer per viewer. When time runs out, AI scores relevance and originality.",
@@ -174,7 +174,7 @@ function renderEditor() {
     ? "Turn on Category hint to show it during the game."
     : !controlsAllowed ? "Connect Twitch to apply these settings." : (editorIntent === "edit" ? "Save changes to apply your hint timing." : "Your hint timing will apply when the game starts.");
   if (huntMode === "marathon" && hintsEnabled) $("#context-hint-timing-note").textContent += " Marathon hint timing uses up to the first minute of each word.";
-  $("#krillion-quota").textContent = quota ? quota.available ? quota.dailyRemaining + " judged rounds left today · $" + Number(quota.monthlyRemainingUsd).toFixed(2) + " shared AI budget left this month." : quota.reason : "Connect Twitch to see your Krillion allowance.";
+  $("#krillion-quota").textContent = quota ? quota.available ? quota.dailyRemaining + " judged rounds left today · $" + Number(quota.monthlyRemainingUsd).toFixed(2) + " shared AI budget left this month." : quota.reason : "Connect Twitch to see your Odd One In allowance.";
   $("#editor-note").textContent = editing
     ? selectedGame === "context" ? huntMode === "marathon" ? "Hint, voting and chat changes apply now. Difficulty changes apply to the next word. Start fresh to change the starting clock." : "Timer, hint and clutch changes apply now. Difficulty changes apply to the next word. Answers and progress are kept." : "Timer changes keep this round’s answers and progress. Time is measured from when the round began."
     : startingFresh && latestState?.kind !== "idle"
@@ -450,6 +450,7 @@ $("#game-form").addEventListener("submit", async (event) => {
         prompt: selectedGame === "krillion" ? $("#krillion-prompt").value.trim() || undefined : undefined };
   busy = true;
   if (selectedGame === "context") Object.assign(body, { huntMode, themeVoting, chatEnabled });
+  body.action = ({ wordle: "wordsprint", krillion: "oddonein" })[body.action] || body.action;
   renderEditor();
   try {
     await control(body);
@@ -468,7 +469,7 @@ $("#stop-game").addEventListener("click", async () => {
   catch (error) { toast(error.message); }
 });
 $("#retry-krillion-judging").addEventListener("click", async () => {
-  try { await control({ action: "retry-krillion-judging" }); }
+  try { await control({ action: "retry-oddonein-judging" }); }
   catch (error) { toast(error.message); }
 });
 $("#connect-button").addEventListener("click", () => { location.href = "/auth/start"; });

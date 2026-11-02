@@ -41,8 +41,8 @@
             <label class="field-label" for="game-mode">Game</label>
             <select id="game-mode" class="text-field" autofocus>
               <option value="context">◉ Word Hunt</option>
-              <option value="krillion">✳ Krillion</option>
-              <option value="wordle">▦ Wordle elimination</option>
+              <option value="krillion">✳ Odd One In</option>
+              <option value="wordle">▦ Word Sprint</option>
             </select>
             <p id="game-description" class="field-help"></p>
 
@@ -82,14 +82,14 @@
                 <textarea id="krillion-prompt" class="text-field" rows="3" maxlength="180" placeholder="Leave blank for a random prompt"></textarea>
               </div>
               <label class="field-label">Answer timer</label>
-              <div class="timer-options" id="krillion-duration" role="group" aria-label="Krillion answer timer">
+              <div class="timer-options" id="krillion-duration" role="group" aria-label="Odd One In answer timer">
                 <button type="button" data-seconds="30" class="selected">30 sec</button><button type="button" data-seconds="45">45 sec</button><button type="button" data-seconds="60">1 min</button>
               </div>
             </div>
 
             <div class="mode-settings hidden" data-mode="wordle">
               <label class="field-label">Round timer</label>
-              <div class="timer-options" id="wordle-duration" role="group" aria-label="Wordle round timer">
+              <div class="timer-options" id="wordle-duration" role="group" aria-label="Word Sprint round timer">
                 <button type="button" data-seconds="30">30 sec</button><button type="button" data-seconds="45" class="selected">45 sec</button><button type="button" data-seconds="60">1 min</button>
               </div>
             </div>
@@ -106,7 +106,7 @@
             <div class="url-row"><code id="overlay-url"></code><button id="copy-overlay" class="copy-button" type="button">Copy URL</button></div>
             <p class="field-help">Keep this URL private. The game pauses after five minutes without a dashboard or OBS source connected.</p>
             <button id="rotate-overlay" class="text-button hidden" type="button">Replace OBS URL</button>
-            <details class="help-details"><summary>How chat plays</summary><p id="viewer-instructions"></p><p class="moderator-help">Broadcaster and moderators: <code>!game context</code>, <code>!game krillion</code>, <code>!game wordle</code>, <code>!stop</code>.</p></details>
+            <details class="help-details"><summary>How chat plays</summary><p id="viewer-instructions"></p><p class="moderator-help">Broadcaster and moderators: <code>!game context</code>, <code>!game oddonein</code>, <code>!game wordsprint</code>, <code>!stop</code>.</p></details>
 
           </div>
 </dialog>

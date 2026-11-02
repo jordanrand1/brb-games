@@ -213,7 +213,7 @@ test("parallel reservation attempts cannot overrun the shared monthly allowance"
   assert.throws(() => db.reserve("other", "extra", 1), /allowance|budget/);
 });
 
-test("operator judge validation opens Krillion only when relevance and injection checks pass", async (t) => {
+test("operator judge validation opens Odd One In only when relevance and injection checks pass", async (t) => {
   const { validateJudge } = await import("../src/judge-validation.ts");
   const { db, cleanup } = fixture(t), rooms = new Rooms(db, { ...options, aiKey: "fake" }); cleanup.push(() => rooms.dispose());
   assert.equal(rooms.quota("101").available, false);

@@ -91,3 +91,15 @@ test("Marathon chat controls require channel broadcaster or moderator authority"
   await rooms.chat(room, { ...event, chatter_user_id: "101", chatter_user_login: "owner" });
   assert.equal(room.game.state.contextMode, "marathon"); assert.equal(room.game.state.durationSeconds, 180);
 });
+
+test("renamed game chat commands enforce permissions and preserve the creative question", async (t) => {
+  const { room, rooms } = fixture(t); room.game.resume();
+  const event = { broadcaster_user_id: "101", chatter_user_id: "202", chatter_user_login: "viewer", badges: [], message: { text: "!game wordsprint" } };
+  await rooms.chat(room, event); assert.equal(room.game.state.kind, "idle");
+  const moderator = { ...event, chatter_user_login: "mod", badges: [{ set_id: "moderator" }] };
+  await rooms.chat(room, moderator); assert.equal(room.game.state.kind, "wordle");
+  let checks = 0; t.mock.method(rooms, "requireQuota", () => { checks++; });
+  await rooms.chat(room, { ...moderator, chatter_user_login: "mod2", message: { text: "!game oddonein Name a food for a picnic." } });
+  assert.equal(checks, 1); assert.equal(room.game.state.kind, "krillion");
+  assert.equal(room.game.state.krillionPrompt, "Name a food for a picnic.");
+});
